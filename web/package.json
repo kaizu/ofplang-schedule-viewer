@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "datasets": "node scripts/collect-datasets.mjs",
+    "predev": "npm run datasets",
     "dev": "vite",
+    "prebuild": "npm run datasets",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

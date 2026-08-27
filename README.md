@@ -12,9 +12,10 @@ dataflow graph and the Gantt chart of a plan side by side, linked: pick a bar
 and the workflow node it came from lights up, pick a node and every bar under
 it lights up. No install, no server, no Python.
 
-> **Status: early.** The reader and the data model are in place and tested; the
-> application on top of them is not built yet. `prototype/` holds a single-file
-> look-and-feel study that shows where this is going.
+> **Status: early.** The Gantt side works — pick a bundled plan or drop your
+> own, read it three ways, select an activity, export the chart. The workflow
+> graph and the linking between the two are next. `prototype/` holds the
+> single-file look-and-feel study the visual decisions were made against.
 
 ## Layout
 
@@ -23,6 +24,10 @@ it lights up. No install, no server, no Python.
 | `web/` | the application — Vite + TypeScript, no runtime dependency beyond `yaml` |
 | `web/src/model/` | types for the workflow, the environment and the execution document |
 | `web/src/read/` | YAML → those types; the only part that tracks the specifications |
+| `web/src/model/scene.ts` | the indices every view is built on — by node, by arc, by machine |
+| `web/src/layout/` | lanes, bars and the time scale; pure functions, no DOM |
+| `web/src/view/` | SVG rendering, the inspector, and the SVG export |
+| `web/scripts/collect-datasets.mjs` | turns the submodule's examples into the bundled datasets |
 | `web/tests/golden/` | every example the pinned submodule ships must read |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
@@ -46,7 +51,8 @@ git clone --recurse-submodules git@github.com:kaizu/ofplang-schedule-viewer.git
 cd web
 npm install
 
-npm run dev        # development server
+npm run dev        # development server (collects the datasets first)
+npm run datasets   # rebuild public/datasets/ from external/
 npm run typecheck  # tsc --noEmit
 npm test           # golden tests against external/ofplang-schedule
 npm run build      # typecheck + production build into web/dist

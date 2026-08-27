@@ -4,9 +4,85 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ofplang Plan Viewer</title>
+    <meta
+      name="description"
+      content="Read an ofp-schedule execution plan: what runs where, and when."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    />
   </head>
   <body>
-    <main id="app"></main>
+    <div id="app">
+      <div class="rail">
+        <div class="wordmark"><b>Plan Viewer</b><span class="tagchip">ofp-schedule</span></div>
+
+        <label class="lg" for="dataset">Plan</label>
+        <select id="dataset" aria-label="Plan"></select>
+
+        <div class="readouts">
+          <div class="readout"><span class="k">Outcome</span><span class="v" id="ro-outcome">—</span></div>
+          <div class="readout"><span class="k">Makespan</span><span class="v num" id="ro-makespan">—</span></div>
+          <div class="readout"><span class="k">Activities</span><span class="v num" id="ro-count">—</span></div>
+          <select id="theme" aria-label="Theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
+
+      <main>
+        <section class="pane">
+          <div class="pane-hd">
+            <h2>Execution plan</h2>
+            <div class="seg" id="views" role="group" aria-label="View"></div>
+            <div class="legend">
+              <span class="lg"><i class="sw processing"></i>processing</span>
+              <span class="lg"><i class="sw transport"></i>transport</span>
+              <span class="lg"><i class="sw held"></i>device held</span>
+              <span class="lg"><i class="sw relay"></i>relay</span>
+            </div>
+            <span class="spacer"></span>
+            <button id="labels" aria-pressed="true">Labels</button>
+            <div class="seg" role="group" aria-label="Time zoom">
+              <button id="zoom-out" aria-label="Zoom out">&minus;</button>
+              <button id="zoom-fit">Fit</button>
+              <button id="zoom-in" aria-label="Zoom in">+</button>
+            </div>
+            <button id="export">Export SVG</button>
+          </div>
+
+          <div class="banner" id="banner" hidden></div>
+
+          <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0">
+            <div class="axis-row">
+              <div class="axis-gutter"></div>
+              <div class="axis-scroll" id="axis-scroll"><svg id="axis"></svg></div>
+            </div>
+            <div class="body-row" id="body-row">
+              <svg class="gut" id="gutter"></svg>
+              <div class="plot-scroll" id="plot-scroll"><svg id="plot"></svg></div>
+            </div>
+          </div>
+        </section>
+
+        <aside><div class="insp" id="inspector"></div></aside>
+      </main>
+
+      <div class="status">
+        <span id="status-selection">Nothing selected</span>
+        <span class="spacer"></span>
+        <span class="mono" id="status-source"></span>
+      </div>
+    </div>
+
+    <div id="tip"></div>
+    <div id="drop">Drop a plan, a workflow or an environment YAML</div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
