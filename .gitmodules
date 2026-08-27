@@ -1,0 +1,3 @@
+[submodule "external/ofplang-schedule"]
+	path = external/ofplang-schedule
+	url = https://github.com/ofplang/schedule.git

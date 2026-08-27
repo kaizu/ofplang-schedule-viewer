@@ -1,0 +1,1264 @@
+<title>ofplang Plan Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+/* ── tokens ──────────────────────────────────────────────────────────────
+   Light is the complete set on bare :root. Dark redefines only tokens, once
+   for the un-stamped system default and once for the explicit stamp.
+   Neutrals carry a slight green bias — anodized bench metal, not pure grey. */
+:root {
+  --page:      #f5f6f4;
+  --panel:     #ffffff;
+  --sunken:    #eceeea;
+  --border:    #dfe2dd;
+  --hairline:  #ebeee9;
+  --ink:       #181b19;
+  --ink-2:     #40453f;
+  --muted:     #6b706b;
+  --faint:     #9aa09a;
+
+  --proc:      #3d73ad;   /* validated: OKLCH L .545 C .108 */
+  --xfer:      #a06d23;   /* validated: OKLCH L .575 C .108 */
+  --now:       #a2412f;
+  --ring:      #181b19;
+
+  --proc-soft: #3d73ad1f;
+  --xfer-soft: #a06d231f;
+  --sel-wash:  #181b190a;
+
+  --shadow:    0 1px 2px #1c221c14, 0 8px 24px #1c221c0f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page:     #121412;
+    --panel:    #1a1d1b;
+    --sunken:   #161917;
+    --border:   #2a2e2b;
+    --hairline: #232724;
+    --ink:      #e6e8e4;
+    --ink-2:    #bcc1bb;
+    --muted:    #8d938c;
+    --faint:    #656b65;
+
+    --proc:     #5990cc;  /* validated: OKLCH L .641 C .108 */
+    --xfer:     #b9853f;  /* validated: OKLCH L .655 C .108 */
+    --now:      #d1705f;
+    --ring:     #e6e8e4;
+
+    --proc-soft:#5990cc26;
+    --xfer-soft:#b9853f26;
+    --sel-wash: #e6e8e40d;
+
+    --shadow:   0 1px 2px #00000040, 0 8px 24px #00000038;
+  }
+}
+:root[data-theme="dark"] {
+  --page:     #121412;
+  --panel:    #1a1d1b;
+  --sunken:   #161917;
+  --border:   #2a2e2b;
+  --hairline: #232724;
+  --ink:      #e6e8e4;
+  --ink-2:    #bcc1bb;
+  --muted:    #8d938c;
+  --faint:    #656b65;
+
+  --proc:     #5990cc;
+  --xfer:     #b9853f;
+  --now:      #d1705f;
+  --ring:     #e6e8e4;
+
+  --proc-soft:#5990cc26;
+  --xfer-soft:#b9853f26;
+  --sel-wash: #e6e8e40d;
+
+  --shadow:   0 1px 2px #00000040, 0 8px 24px #00000038;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.num  { font-variant-numeric: tabular-nums; }
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+}
+
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  height: 46px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding-right: 16px;
+  border-right: 1px solid var(--hairline);
+  height: 100%;
+  align-content: center;
+  align-items: center;
+}
+.wordmark b {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  font-size: 14px;
+}
+.wordmark span {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.readouts { display: flex; gap: 20px; margin-left: auto; align-items: center; }
+.readout { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.readout .k {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint);
+}
+.readout .v { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+select, button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+select { padding-right: 22px; }
+button:hover, select:hover { background: var(--sunken); }
+:focus-visible { outline: 2px solid var(--proc); outline-offset: 1px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.seg button {
+  border: 0; border-radius: 0; padding: 3px 9px;
+  font-size: 11.5px; color: var(--muted); background: transparent;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--sunken); color: var(--ink); font-weight: 500; }
+
+.icobtn {
+  width: 26px; height: 26px; padding: 0;
+  display: inline-grid; place-items: center;
+  font-size: 13px; line-height: 1;
+}
+
+/* ── main ──────────────────────────────────────────────────────────────── */
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  min-height: 0;
+}
+@media (max-width: 1080px) { main { grid-template-columns: minmax(0, 1fr); } aside { display: none; } }
+
+.stack {
+  display: grid;
+  grid-template-rows: var(--r1, 46fr) 5px var(--r2, 54fr);
+  min-height: 0;
+  min-width: 0;
+}
+.stack > section, .stack > .splitter { min-height: 0; }
+
+.pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0; min-width: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+
+.pane-hd {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+  min-height: 36px;
+}
+.pane-hd h2 {
+  margin: 0;
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.pane-hd .spacer { margin-left: auto; }
+.hint { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+.splitter {
+  background: var(--border);
+  cursor: row-resize;
+  position: relative;
+}
+.splitter::after {
+  content: ""; position: absolute; inset: -3px 0;
+}
+.splitter:hover { background: var(--proc); }
+
+/* ── graph ─────────────────────────────────────────────────────────────── */
+.scroll { overflow: auto; min-height: 0; background: var(--sunken); }
+#graphScroll { padding: 16px; }
+svg { display: block; }
+
+.gnode .box {
+  fill: var(--panel);
+  stroke: var(--border);
+  stroke-width: 1;
+  rx: 3;
+}
+.gnode.composite > .box { fill: var(--sunken); stroke-dasharray: none; }
+.gnode.open > .box { fill: color-mix(in srgb, var(--panel) 70%, var(--sunken)); }
+.gnode .nid { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.gnode .nproc { fill: var(--faint); font-size: 9px; }
+.gnode .pname { fill: var(--muted); font-size: 8.5px; }
+.gnode .pdot { fill: var(--panel); stroke: var(--muted); stroke-width: 1; }
+.gnode .hdrline { stroke: var(--hairline); stroke-width: 1; }
+.gnode .badge { fill: var(--sunken); stroke: var(--border); rx: 2.5; }
+.gnode .btext { fill: var(--muted); font-size: 8.5px; font-weight: 500; }
+.gnode .chev { fill: var(--muted); font-size: 9px; }
+
+.gnode.hit { cursor: pointer; }
+.gnode.hit:hover .box { stroke: var(--ink-2); }
+.gnode.lit > .box { stroke: var(--proc); stroke-width: 2; }
+.gnode.lit .nid { fill: var(--proc); }
+.gnode.anc > .box { stroke: var(--proc); stroke-dasharray: 3 3; }
+.gnode.dim { opacity: 0.34; }
+
+.edge { fill: none; stroke: var(--faint); stroke-width: 1.25; }
+.edge.data { stroke-dasharray: 3 3; }
+.edge.lit { stroke: var(--xfer); stroke-width: 2; }
+.edge.dim { opacity: 0.25; }
+.arrowhead { fill: var(--faint); }
+.arrowhead.lit { fill: var(--xfer); }
+
+.empty { padding: 26px; color: var(--muted); font-size: 12px; }
+
+/* ── gantt ─────────────────────────────────────────────────────────────── */
+.axis-row { display: flex; border-bottom: 1px solid var(--hairline); background: var(--panel); }
+.axis-gutter { width: 176px; flex: 0 0 176px; border-right: 1px solid var(--hairline); }
+.axis-scroll { overflow: hidden; flex: 1 1 auto; }
+.body-row { display: flex; overflow: auto; min-height: 0; }
+.gut { flex: 0 0 176px; position: sticky; left: 0; z-index: 2; background: var(--panel); border-right: 1px solid var(--hairline); }
+.plot-scroll { overflow-x: auto; overflow-y: hidden; flex: 1 1 auto; }
+
+.lane-bg { fill: transparent; }
+.lane-bg.alt { fill: var(--sunken); opacity: 0.55; }
+.lane-label { fill: var(--ink-2); font-size: 10.5px; font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif; font-weight: 500; }
+.lane-kind { fill: var(--faint); font-size: 8.5px; font-family: "IBM Plex Mono", monospace; }
+.lane-rule { stroke: var(--hairline); stroke-width: 1; }
+
+.grid-ln { stroke: var(--hairline); stroke-width: 1; }
+.tick-tx { fill: var(--faint); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.axis-cap { fill: var(--muted); font-size: 9.5px; font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 600; letter-spacing: .08em; }
+
+.bar { rx: 3; cursor: pointer; }
+.bar.proc  { fill: var(--proc); }
+.bar.xfer  { fill: var(--xfer); }
+.bar.ghost { fill: url(#hatch); stroke: var(--xfer); stroke-width: 1; stroke-opacity: .45; }
+.bar.relay { fill: var(--xfer); }
+.bar.done  { opacity: .55; }
+.bar.dim   { opacity: .17; }
+.bar.lit   { stroke: var(--ring); stroke-width: 2; }
+.bar-tx { fill: var(--panel); font-size: 9.5px; font-family: "IBM Plex Mono", monospace; pointer-events: none; }
+.bar-tx.out { fill: var(--muted); }
+
+.hatch-ln { stroke: var(--xfer); stroke-width: 2; opacity: .45; }
+.nowline { stroke: var(--now); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.nowcap { fill: var(--now); font-size: 9.5px; font-weight: 600; }
+
+.legend { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.sw { width: 15px; height: 9px; border-radius: 2px; display: inline-block; }
+.sw.proc { background: var(--proc); }
+.sw.xfer { background: var(--xfer); }
+.sw.ghost { background: repeating-linear-gradient(45deg, transparent 0 2px, var(--xfer) 2px 3.5px); border: 1px solid var(--xfer); opacity: .8; }
+.sw.relay { width: 9px; height: 9px; transform: rotate(45deg); background: var(--xfer); border-radius: 1px; }
+
+/* ── table view ────────────────────────────────────────────────────────── */
+.tblwrap { overflow: auto; min-height: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+th, td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+th {
+  position: sticky; top: 0; background: var(--panel);
+  font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 9.5px;
+  font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+td.n { font-variant-numeric: tabular-nums; text-align: right; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: var(--sel-wash); }
+tr.row.lit td { background: var(--proc-soft); }
+.kindchip {
+  display: inline-block; padding: 0 5px; border-radius: 3px;
+  font-size: 9.5px; font-family: "IBM Plex Mono", monospace;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.kindchip.processing { border-color: var(--proc); color: var(--proc); }
+.kindchip.transport  { border-color: var(--xfer); color: var(--xfer); }
+
+/* ── inspector ─────────────────────────────────────────────────────────── */
+aside {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: auto;
+  min-height: 0;
+}
+.insp { padding: 12px 14px 22px; display: flex; flex-direction: column; gap: 16px; }
+.insp h3 {
+  margin: 0 0 6px;
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 10px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--faint);
+}
+.insp .lead { font-size: 14px; font-weight: 500; letter-spacing: -.01em; word-break: break-word; }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11.5px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: "IBM Plex Mono", monospace; font-size: 11px; word-break: break-all; }
+
+.util { display: flex; flex-direction: column; gap: 5px; }
+.ubar { display: grid; grid-template-columns: 84px 1fr 34px; gap: 8px; align-items: center; font-size: 11px; }
+.ubar .t { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "IBM Plex Sans Condensed", sans-serif; }
+.ubar .track { height: 7px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.ubar .fill { height: 100%; border-radius: 2px; background: var(--proc); }
+.ubar .fill.x { background: var(--xfer); }
+.ubar .p { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.note {
+  font-size: 11px; color: var(--muted);
+  border-left: 2px solid var(--border); padding-left: 9px;
+}
+
+/* ── status strip ──────────────────────────────────────────────────────── */
+.status {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 14px; height: 26px;
+  background: var(--panel); border-top: 1px solid var(--border);
+  font-size: 10.5px; color: var(--faint);
+}
+.status .mono { color: var(--muted); }
+.status .spacer { margin-left: auto; }
+
+/* ── tooltip ───────────────────────────────────────────────────────────── */
+#tip {
+  position: fixed; z-index: 50; pointer-events: none;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 5px;
+  box-shadow: var(--shadow);
+  padding: 6px 9px; font-size: 11px; max-width: 300px;
+  display: none;
+}
+#tip .tt { font-weight: 600; margin-bottom: 2px; }
+#tip .tl { color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div id="app">
+  <div class="rail">
+    <div class="wordmark"><b>Plan Viewer</b><span>prototype</span></div>
+
+    <label class="hint" for="dsSel">Dataset</label>
+    <select id="dsSel" aria-label="Dataset"></select>
+
+    <div class="readouts">
+      <div class="readout"><span class="k">Outcome</span><span class="v" id="roOutcome">—</span></div>
+      <div class="readout"><span class="k">Makespan</span><span class="v num" id="roMake">—</span></div>
+      <div class="readout"><span class="k">Activities</span><span class="v num" id="roActs">—</span></div>
+      <select id="themeSel" aria-label="Theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </div>
+
+  <main>
+    <div class="stack" id="stack">
+      <!-- graph -->
+      <section class="pane">
+        <div class="pane-hd">
+          <h2>Workflow</h2>
+          <span class="hint" id="graphHint"></span>
+          <span class="spacer"></span>
+          <button id="expandAll">Expand all</button>
+          <button id="collapseAll">Collapse</button>
+          <div class="seg" role="group" aria-label="Graph zoom">
+            <button id="gzOut" aria-label="Zoom out">&minus;</button>
+            <button id="gzFit">Fit</button>
+            <button id="gzIn" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="scroll" id="graphScroll"><svg id="graphSvg"></svg></div>
+      </section>
+
+      <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize panes"></div>
+
+      <!-- gantt -->
+      <section class="pane" style="border-bottom:0">
+        <div class="pane-hd">
+          <h2>Execution plan</h2>
+          <div class="seg" role="group" aria-label="Gantt view">
+            <button data-view="device" aria-pressed="true">Device</button>
+            <button data-view="lane" aria-pressed="false">Flow</button>
+            <button data-view="activity" aria-pressed="false">Activity</button>
+            <button data-view="table" aria-pressed="false">Table</button>
+          </div>
+          <div class="legend" id="legend">
+            <span class="lg"><i class="sw proc"></i>processing</span>
+            <span class="lg"><i class="sw xfer"></i>transport</span>
+            <span class="lg"><i class="sw ghost"></i>device held</span>
+            <span class="lg"><i class="sw relay"></i>relay</span>
+          </div>
+          <span class="spacer"></span>
+          <div class="seg" role="group" aria-label="Time zoom">
+            <button id="tzOut" aria-label="Zoom out">&minus;</button>
+            <button id="tzFit">Fit</button>
+            <button id="tzIn" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div id="ganttBody" style="display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0">
+          <div class="axis-row"><div class="axis-gutter"></div><div class="axis-scroll" id="axisScroll"><svg id="axisSvg"></svg></div></div>
+          <div class="body-row" id="bodyRow">
+            <svg class="gut" id="gutSvg"></svg>
+            <div class="plot-scroll" id="plotScroll"><svg id="plotSvg"></svg></div>
+          </div>
+        </div>
+        <div class="tblwrap" id="tableWrap" hidden></div>
+      </section>
+    </div>
+
+    <aside><div class="insp" id="insp"></div></aside>
+  </main>
+
+  <div class="status">
+    <span id="stSel">Nothing selected</span>
+    <span class="spacer"></span>
+    <span class="mono" id="stSrc"></span>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script id="datasets" type="application/json">{"order":["simple","simple_replan","two_arms","reformatter","plate_batch"],"sets":{"simple":{"label":"Simple","blurb":"One transport, two devices","workflow":{"spec_version":"0.0","types":{"Sample":{"domain":"object"}},"processes":{"source":{"kind":"atomic","outputs":{"source_out":{"type":"Sample","phase":"data"}},"objects":{"create":["outputs.source_out"]}},"target":{"kind":"atomic","inputs":{"target_in":{"type":"Sample","phase":"data"}},"objects":{"consume":["inputs.target_in"]}},"main":{"kind":"composite","inputs":{},"outputs":{},"body":{"nodes":[{"id":"SampleSource","process":"source"},{"id":"SampleTarget","process":"target","state":{"target_in":{"from":"SampleSource.source_out"}}}],"returns":{}}}},"entry":"main"},"env":{"time":{"unit":"second"},"devices":[{"id":"station_0","spots":["core"]},{"id":"station_1","spots":["core"]}],"transporters":[{"id":"transport"}],"transports":[{"transporter":"transport","from":"station_0.core","to":"station_1.core","duration":1}],"processes":{"source":{"modes":[{"devices":["station_0"],"duration":2,"output_spots":{"source_out":"station_0.core"}}]},"target":{"modes":[{"devices":["station_1"],"duration":2,"input_spots":{"target_in":"station_1.core"}}]}}},"plan":{"time":{"unit":"second"},"outcome":"optimal","objective":{"kind":"makespan","value":5},"activities":[{"kind":"processing","start":0,"end":2,"process":"source","mode":"0","node":["SampleSource"],"devices":["station_0"],"output_spots":{"source_out":"station_0.core"}},{"kind":"transport","start":2,"end":3,"from_spot":"station_0.core","to_spot":"station_1.core","transporter":"transport","arc":{"from":{"node":["SampleSource"],"port":"source_out"},"to":{"node":["SampleTarget"],"port":"target_in"}}},{"kind":"processing","start":3,"end":5,"process":"target","mode":"0","node":["SampleTarget"],"devices":["station_1"],"input_spots":{"target_in":"station_1.core"}}],"meta":{"workflow":"examples/simple.workflow.yaml","environment":"examples/simple.env.yaml"}},"source":{"workflow":"simple.workflow.yaml","env":"simple.env.yaml","plan":"outputs/simple.plan.yaml"}},"simple_replan":{"label":"Simple (replan)","blurb":"Same plan re-optimised at now = 3","workflow":{"spec_version":"0.0","types":{"Sample":{"domain":"object"}},"processes":{"source":{"kind":"atomic","outputs":{"source_out":{"type":"Sample","phase":"data"}},"objects":{"create":["outputs.source_out"]}},"target":{"kind":"atomic","inputs":{"target_in":{"type":"Sample","phase":"data"}},"objects":{"consume":["inputs.target_in"]}},"main":{"kind":"composite","inputs":{},"outputs":{},"body":{"nodes":[{"id":"SampleSource","process":"source"},{"id":"SampleTarget","process":"target","state":{"target_in":{"from":"SampleSource.source_out"}}}],"returns":{}}}},"entry":"main"},"env":{"time":{"unit":"second"},"devices":[{"id":"station_0","spots":["core"]},{"id":"station_1","spots":["core"]}],"transporters":[{"id":"transport"}],"transports":[{"transporter":"transport","from":"station_0.core","to":"station_1.core","duration":1}],"processes":{"source":{"modes":[{"devices":["station_0"],"duration":2,"output_spots":{"source_out":"station_0.core"}}]},"target":{"modes":[{"devices":["station_1"],"duration":2,"input_spots":{"target_in":"station_1.core"}}]}}},"plan":{"time":{"unit":"second"},"now":3,"outcome":"optimal","objective":{"kind":"makespan","value":6},"activities":[{"kind":"processing","status":"completed","start":0,"end":2,"process":"source","mode":"0","node":["SampleSource"],"devices":["station_0"],"output_spots":{"source_out":"station_0.core"}},{"kind":"transport","start":3,"end":4,"from_spot":"station_0.core","to_spot":"station_1.core","transporter":"transport","arc":{"from":{"node":["SampleSource"],"port":"source_out"},"to":{"node":["SampleTarget"],"port":"target_in"}}},{"kind":"processing","start":4,"end":6,"process":"target","mode":"0","node":["SampleTarget"],"devices":["station_1"],"input_spots":{"target_in":"station_1.core"}}],"meta":{"workflow":"examples/simple.workflow.yaml","environment":"examples/simple.env.yaml","status":"examples/simple.status.yaml"}},"source":{"workflow":"simple.workflow.yaml","env":"simple.env.yaml","plan":"outputs/simple.replan.yaml"}},"two_arms":{"label":"Two arms","blurb":"Two transporters competing","workflow":{"spec_version":"0.0","types":{"Sample":{"domain":"object"}},"processes":{"source_a":{"kind":"atomic","outputs":{"sample_out":{"type":"Sample","phase":"data"}},"objects":{"create":["outputs.sample_out"]}},"source_b":{"kind":"atomic","outputs":{"sample_out":{"type":"Sample","phase":"data"}},"objects":{"create":["outputs.sample_out"]}},"target_a":{"kind":"atomic","inputs":{"sample_in":{"type":"Sample","phase":"data"}},"objects":{"consume":["inputs.sample_in"]}},"target_b":{"kind":"atomic","inputs":{"sample_in":{"type":"Sample","phase":"data"}},"objects":{"consume":["inputs.sample_in"]}},"main":{"kind":"composite","inputs":{},"outputs":{},"body":{"nodes":[{"id":"SourceA","process":"source_a"},{"id":"TargetA","process":"target_a","state":{"sample_in":{"from":"SourceA.sample_out"}}},{"id":"SourceB","process":"source_b"},{"id":"TargetB","process":"target_b","state":{"sample_in":{"from":"SourceB.sample_out"}}}],"returns":{}}}},"entry":"main"},"env":{"time":{"unit":"second"},"devices":[{"id":"station_a1","spots":["core"]},{"id":"station_a2","spots":["core"]},{"id":"station_b1","spots":["core"]},{"id":"station_b2","spots":["core"]}],"transporters":[{"id":"arm0"},{"id":"arm1"}],"transports":[{"transporter":"arm0","from":"station_a1.core","to":"station_a2.core","duration":10},{"transporter":"arm1","from":"station_a1.core","to":"station_a2.core","duration":7},{"transporter":"arm0","from":"station_b1.core","to":"station_b2.core","duration":10}],"processes":{"source_a":{"modes":[{"devices":["station_a1"],"duration":5,"output_spots":{"sample_out":"station_a1.core"}}]},"source_b":{"modes":[{"devices":["station_b1"],"duration":5,"output_spots":{"sample_out":"station_b1.core"}}]},"target_a":{"modes":[{"devices":["station_a2"],"duration":5,"input_spots":{"sample_in":"station_a2.core"}}]},"target_b":{"modes":[{"devices":["station_b2"],"duration":5,"input_spots":{"sample_in":"station_b2.core"}}]}}},"plan":{"time":{"unit":"second"},"outcome":"optimal","objective":{"kind":"makespan","value":20},"activities":[{"kind":"processing","start":0,"end":5,"process":"source_a","mode":"0","node":["SourceA"],"devices":["station_a1"],"output_spots":{"sample_out":"station_a1.core"}},{"kind":"processing","start":0,"end":5,"process":"source_b","mode":"0","node":["SourceB"],"devices":["station_b1"],"output_spots":{"sample_out":"station_b1.core"}},{"kind":"transport","start":5,"end":12,"from_spot":"station_a1.core","to_spot":"station_a2.core","transporter":"arm1","arc":{"from":{"node":["SourceA"],"port":"sample_out"},"to":{"node":["TargetA"],"port":"sample_in"}}},{"kind":"transport","start":5,"end":15,"from_spot":"station_b1.core","to_spot":"station_b2.core","transporter":"arm0","arc":{"from":{"node":["SourceB"],"port":"sample_out"},"to":{"node":["TargetB"],"port":"sample_in"}}},{"kind":"processing","start":12,"end":17,"process":"target_a","mode":"0","node":["TargetA"],"devices":["station_a2"],"input_spots":{"sample_in":"station_a2.core"}},{"kind":"processing","start":15,"end":20,"process":"target_b","mode":"0","node":["TargetB"],"devices":["station_b2"],"input_spots":{"sample_in":"station_b2.core"}}],"meta":{"workflow":"examples/two_arms.workflow.yaml","environment":"examples/two_arms.env.yaml"}},"source":{"workflow":"two_arms.workflow.yaml","env":"two_arms.env.yaml","plan":"outputs/two_arms.plan.yaml"}},"reformatter":{"label":"Reformatter","blurb":"Eight plate operations, fan-out and merge","workflow":{"spec_version":"0.0","types":{"Plate":{"domain":"object"}},"processes":{"preparation":{"kind":"atomic","outputs":{"prep_out_rf12":{"type":"Plate","phase":"data"},"prep_out_motoman":{"type":"Plate","phase":"data"},"prep_out_a3_24":{"type":"Plate","phase":"data"}},"objects":{"create":["outputs.prep_out_rf12","outputs.prep_out_motoman","outputs.prep_out_a3_24"]}},"reformatter_12":{"kind":"atomic","inputs":{"rf12_in":{"type":"Plate","phase":"data"}},"outputs":{"rf12_out_rf20":{"type":"Plate","phase":"data"},"rf12_out_a4":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.rf12_in"],"create":["outputs.rf12_out_rf20","outputs.rf12_out_a4"]}},"motoman_7":{"kind":"atomic","inputs":{"motoman_in":{"type":"Plate","phase":"data"}},"outputs":{"motoman_out_a4":{"type":"Plate","phase":"data"},"motoman_out_rf20":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.motoman_in"],"create":["outputs.motoman_out_a4","outputs.motoman_out_rf20"]}},"biomek_a3_24":{"kind":"atomic","inputs":{"a3_24_in":{"type":"Plate","phase":"data"}},"outputs":{"a3_24_out_rf20":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.a3_24_in"],"create":["outputs.a3_24_out_rf20"]}},"biomek_a4_16":{"kind":"atomic","inputs":{"a4_in_rf12":{"type":"Plate","phase":"data"},"a4_in_motoman":{"type":"Plate","phase":"data"}},"outputs":{"a4_out_rf3":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.a4_in_rf12","inputs.a4_in_motoman"],"create":["outputs.a4_out_rf3"]}},"reformatter_20":{"kind":"atomic","inputs":{"rf20_in_rf12":{"type":"Plate","phase":"data"},"rf20_in_motoman":{"type":"Plate","phase":"data"},"rf20_in_a3_24":{"type":"Plate","phase":"data"}},"outputs":{"rf20_out_rf3":{"type":"Plate","phase":"data"},"rf20_out_a3_19":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.rf20_in_rf12","inputs.rf20_in_motoman","inputs.rf20_in_a3_24"],"create":["outputs.rf20_out_rf3","outputs.rf20_out_a3_19"]}},"biomek_a3_19":{"kind":"atomic","inputs":{"a3_19_in":{"type":"Plate","phase":"data"}},"outputs":{"a3_19_out_rf3":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.a3_19_in"],"create":["outputs.a3_19_out_rf3"]}},"reformatter_3":{"kind":"atomic","inputs":{"rf3_in_a4":{"type":"Plate","phase":"data"},"rf3_in_rf20":{"type":"Plate","phase":"data"},"rf3_in_a3_19":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.rf3_in_a4","inputs.rf3_in_rf20","inputs.rf3_in_a3_19"]}},"main":{"kind":"composite","inputs":{},"outputs":{},"body":{"nodes":[{"id":"Preparation","process":"preparation"},{"id":"Reformatter12","process":"reformatter_12","state":{"rf12_in":{"from":"Preparation.prep_out_rf12"}}},{"id":"Motoman7","process":"motoman_7","state":{"motoman_in":{"from":"Preparation.prep_out_motoman"}}},{"id":"BiomekA3_24","process":"biomek_a3_24","state":{"a3_24_in":{"from":"Preparation.prep_out_a3_24"}}},{"id":"BiomekA4_16","process":"biomek_a4_16","state":{"a4_in_rf12":{"from":"Reformatter12.rf12_out_a4"},"a4_in_motoman":{"from":"Motoman7.motoman_out_a4"}}},{"id":"Reformatter20","process":"reformatter_20","state":{"rf20_in_rf12":{"from":"Reformatter12.rf12_out_rf20"},"rf20_in_motoman":{"from":"Motoman7.motoman_out_rf20"},"rf20_in_a3_24":{"from":"BiomekA3_24.a3_24_out_rf20"}}},{"id":"BiomekA3_19","process":"biomek_a3_19","state":{"a3_19_in":{"from":"Reformatter20.rf20_out_a3_19"}}},{"id":"Reformatter3","process":"reformatter_3","state":{"rf3_in_a4":{"from":"BiomekA4_16.a4_out_rf3"},"rf3_in_rf20":{"from":"Reformatter20.rf20_out_rf3"},"rf3_in_a3_19":{"from":"BiomekA3_19.a3_19_out_rf3"}}}],"returns":{}}}},"entry":"main"},"env":{"time":{"unit":"second"},"devices":[{"id":"prep","spots":["out_rf12","out_motoman","out_a3_24"]},{"id":"reformatter","spots":["rf12_in","rf_link","rf12_out_a4","rf20_in_motoman","rf20_in_a3_24","rf20_out_a3_19","rf3_in_a4","rf3_in_a3_19"]},{"id":"motoman","spots":["in_from_prep","out_a4","out_rf20"]},{"id":"biomek2000_a3","spots":["a24_in","a24_out","a19_in","a19_out"]},{"id":"biomek2000_a4","spots":["in_from_rf12","in_from_motoman","out_rf3"]}],"transporters":[{"id":"transport"}],"transports":[{"transporter":"transport","from":"prep.out_rf12","to":"reformatter.rf12_in","duration":2},{"transporter":"transport","from":"prep.out_motoman","to":"motoman.in_from_prep","duration":3},{"transporter":"transport","from":"prep.out_a3_24","to":"biomek2000_a3.a24_in","duration":6},{"transporter":"transport","from":"reformatter.rf12_out_a4","to":"biomek2000_a4.in_from_rf12","duration":2},{"transporter":"transport","from":"motoman.out_a4","to":"biomek2000_a4.in_from_motoman","duration":3},{"transporter":"transport","from":"motoman.out_rf20","to":"reformatter.rf20_in_motoman","duration":2},{"transporter":"transport","from":"biomek2000_a3.a24_out","to":"reformatter.rf20_in_a3_24","duration":5},{"transporter":"transport","from":"reformatter.rf20_out_a3_19","to":"biomek2000_a3.a19_in","duration":5},{"transporter":"transport","from":"biomek2000_a4.out_rf3","to":"reformatter.rf3_in_a4","duration":2},{"transporter":"transport","from":"biomek2000_a3.a19_out","to":"reformatter.rf3_in_a3_19","duration":5}],"processes":{"preparation":{"modes":[{"devices":["prep"],"duration":1,"output_spots":{"prep_out_rf12":"prep.out_rf12","prep_out_motoman":"prep.out_motoman","prep_out_a3_24":"prep.out_a3_24"}}]},"reformatter_12":{"modes":[{"devices":["reformatter"],"duration":12,"input_spots":{"rf12_in":"reformatter.rf12_in"},"output_spots":{"rf12_out_rf20":"reformatter.rf_link","rf12_out_a4":"reformatter.rf12_out_a4"}}]},"motoman_7":{"modes":[{"devices":["motoman"],"duration":7,"input_spots":{"motoman_in":"motoman.in_from_prep"},"output_spots":{"motoman_out_a4":"motoman.out_a4","motoman_out_rf20":"motoman.out_rf20"}}]},"biomek_a3_24":{"modes":[{"devices":["biomek2000_a3"],"duration":24,"input_spots":{"a3_24_in":"biomek2000_a3.a24_in"},"output_spots":{"a3_24_out_rf20":"biomek2000_a3.a24_out"}}]},"biomek_a4_16":{"modes":[{"devices":["biomek2000_a4"],"duration":16,"input_spots":{"a4_in_rf12":"biomek2000_a4.in_from_rf12","a4_in_motoman":"biomek2000_a4.in_from_motoman"},"output_spots":{"a4_out_rf3":"biomek2000_a4.out_rf3"}}]},"reformatter_20":{"modes":[{"devices":["reformatter"],"duration":20,"input_spots":{"rf20_in_rf12":"reformatter.rf_link","rf20_in_motoman":"reformatter.rf20_in_motoman","rf20_in_a3_24":"reformatter.rf20_in_a3_24"},"output_spots":{"rf20_out_rf3":"reformatter.rf_link","rf20_out_a3_19":"reformatter.rf20_out_a3_19"}}]},"biomek_a3_19":{"modes":[{"devices":["biomek2000_a3"],"duration":19,"input_spots":{"a3_19_in":"biomek2000_a3.a19_in"},"output_spots":{"a3_19_out_rf3":"biomek2000_a3.a19_out"}}]},"reformatter_3":{"modes":[{"devices":["reformatter"],"duration":3,"input_spots":{"rf3_in_a4":"reformatter.rf3_in_a4","rf3_in_rf20":"reformatter.rf_link","rf3_in_a3_19":"reformatter.rf3_in_a3_19"}}]}}},"plan":{"time":{"unit":"second"},"outcome":"optimal","objective":{"kind":"makespan","value":88},"activities":[{"kind":"processing","start":0,"end":1,"process":"preparation","mode":"0","node":["Preparation"],"devices":["prep"],"output_spots":{"prep_out_rf12":"prep.out_rf12","prep_out_motoman":"prep.out_motoman","prep_out_a3_24":"prep.out_a3_24"}},{"kind":"transport","start":1,"end":7,"from_spot":"prep.out_a3_24","to_spot":"biomek2000_a3.a24_in","transporter":"transport","arc":{"from":{"node":["Preparation"],"port":"prep_out_a3_24"},"to":{"node":["BiomekA3_24"],"port":"a3_24_in"}}},{"kind":"transport","start":7,"end":9,"from_spot":"prep.out_rf12","to_spot":"reformatter.rf12_in","transporter":"transport","arc":{"from":{"node":["Preparation"],"port":"prep_out_rf12"},"to":{"node":["Reformatter12"],"port":"rf12_in"}}},{"kind":"processing","start":7,"end":31,"process":"biomek_a3_24","mode":"0","node":["BiomekA3_24"],"devices":["biomek2000_a3"],"input_spots":{"a3_24_in":"biomek2000_a3.a24_in"},"output_spots":{"a3_24_out_rf20":"biomek2000_a3.a24_out"}},{"kind":"transport","start":9,"end":12,"from_spot":"prep.out_motoman","to_spot":"motoman.in_from_prep","transporter":"transport","arc":{"from":{"node":["Preparation"],"port":"prep_out_motoman"},"to":{"node":["Motoman7"],"port":"motoman_in"}}},{"kind":"processing","start":9,"end":21,"process":"reformatter_12","mode":"0","node":["Reformatter12"],"devices":["reformatter"],"input_spots":{"rf12_in":"reformatter.rf12_in"},"output_spots":{"rf12_out_rf20":"reformatter.rf_link","rf12_out_a4":"reformatter.rf12_out_a4"}},{"kind":"processing","start":12,"end":19,"process":"motoman_7","mode":"0","node":["Motoman7"],"devices":["motoman"],"input_spots":{"motoman_in":"motoman.in_from_prep"},"output_spots":{"motoman_out_a4":"motoman.out_a4","motoman_out_rf20":"motoman.out_rf20"}},{"kind":"transport","start":19,"end":22,"from_spot":"motoman.out_a4","to_spot":"biomek2000_a4.in_from_motoman","transporter":"transport","arc":{"from":{"node":["Motoman7"],"port":"motoman_out_a4"},"to":{"node":["BiomekA4_16"],"port":"a4_in_motoman"}}},{"kind":"transport","start":22,"end":22,"from_spot":"reformatter.rf_link","to_spot":"reformatter.rf_link","arc":{"from":{"node":["Reformatter12"],"port":"rf12_out_rf20"},"to":{"node":["Reformatter20"],"port":"rf20_in_rf12"}}},{"kind":"transport","start":22,"end":24,"from_spot":"motoman.out_rf20","to_spot":"reformatter.rf20_in_motoman","transporter":"transport","arc":{"from":{"node":["Motoman7"],"port":"motoman_out_rf20"},"to":{"node":["Reformatter20"],"port":"rf20_in_motoman"}}},{"kind":"transport","start":24,"end":26,"from_spot":"reformatter.rf12_out_a4","to_spot":"biomek2000_a4.in_from_rf12","transporter":"transport","arc":{"from":{"node":["Reformatter12"],"port":"rf12_out_a4"},"to":{"node":["BiomekA4_16"],"port":"a4_in_rf12"}}},{"kind":"processing","start":26,"end":42,"process":"biomek_a4_16","mode":"0","node":["BiomekA4_16"],"devices":["biomek2000_a4"],"input_spots":{"a4_in_rf12":"biomek2000_a4.in_from_rf12","a4_in_motoman":"biomek2000_a4.in_from_motoman"},"output_spots":{"a4_out_rf3":"biomek2000_a4.out_rf3"}},{"kind":"transport","start":31,"end":36,"from_spot":"biomek2000_a3.a24_out","to_spot":"reformatter.rf20_in_a3_24","transporter":"transport","arc":{"from":{"node":["BiomekA3_24"],"port":"a3_24_out_rf20"},"to":{"node":["Reformatter20"],"port":"rf20_in_a3_24"}}},{"kind":"processing","start":36,"end":56,"process":"reformatter_20","mode":"0","node":["Reformatter20"],"devices":["reformatter"],"input_spots":{"rf20_in_rf12":"reformatter.rf_link","rf20_in_motoman":"reformatter.rf20_in_motoman","rf20_in_a3_24":"reformatter.rf20_in_a3_24"},"output_spots":{"rf20_out_rf3":"reformatter.rf_link","rf20_out_a3_19":"reformatter.rf20_out_a3_19"}},{"kind":"transport","start":56,"end":56,"from_spot":"reformatter.rf_link","to_spot":"reformatter.rf_link","arc":{"from":{"node":["Reformatter20"],"port":"rf20_out_rf3"},"to":{"node":["Reformatter3"],"port":"rf3_in_rf20"}}},{"kind":"transport","start":56,"end":61,"from_spot":"reformatter.rf20_out_a3_19","to_spot":"biomek2000_a3.a19_in","transporter":"transport","arc":{"from":{"node":["Reformatter20"],"port":"rf20_out_a3_19"},"to":{"node":["BiomekA3_19"],"port":"a3_19_in"}}},{"kind":"transport","start":61,"end":63,"from_spot":"biomek2000_a4.out_rf3","to_spot":"reformatter.rf3_in_a4","transporter":"transport","arc":{"from":{"node":["BiomekA4_16"],"port":"a4_out_rf3"},"to":{"node":["Reformatter3"],"port":"rf3_in_a4"}}},{"kind":"processing","start":61,"end":80,"process":"biomek_a3_19","mode":"0","node":["BiomekA3_19"],"devices":["biomek2000_a3"],"input_spots":{"a3_19_in":"biomek2000_a3.a19_in"},"output_spots":{"a3_19_out_rf3":"biomek2000_a3.a19_out"}},{"kind":"transport","start":80,"end":85,"from_spot":"biomek2000_a3.a19_out","to_spot":"reformatter.rf3_in_a3_19","transporter":"transport","arc":{"from":{"node":["BiomekA3_19"],"port":"a3_19_out_rf3"},"to":{"node":["Reformatter3"],"port":"rf3_in_a3_19"}}},{"kind":"processing","start":85,"end":88,"process":"reformatter_3","mode":"0","node":["Reformatter3"],"devices":["reformatter"],"input_spots":{"rf3_in_a4":"reformatter.rf3_in_a4","rf3_in_rf20":"reformatter.rf_link","rf3_in_a3_19":"reformatter.rf3_in_a3_19"}}],"meta":{"workflow":"examples/reformatter.workflow.yaml","environment":"examples/reformatter.env.yaml"}},"source":{"workflow":"reformatter.workflow.yaml","env":"reformatter.env.yaml","plan":"outputs/reformatter.plan.yaml"}},"plate_batch":{"label":"Plate batch","blurb":"Three levels of nesting, 22 steps","workflow":{"spec_version":"0.0","types":{"Plate":{"domain":"object"}},"processes":{"source":{"kind":"atomic","outputs":{"plate_1":{"type":"Plate","phase":"data"},"plate_2":{"type":"Plate","phase":"data"}},"objects":{"create":["outputs.plate_1","outputs.plate_2"]}},"sink":{"kind":"atomic","inputs":{"plate_1":{"type":"Plate","phase":"data"},"plate_2":{"type":"Plate","phase":"data"}},"objects":{"consume":["inputs.plate_1","inputs.plate_2"]}},"peal":{"kind":"atomic","traits":["elidable_iso"],"inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}}},"dispense":{"kind":"atomic","traits":["elidable_iso"],"inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}}},"seal":{"kind":"atomic","traits":["elidable_iso"],"inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}}},"thermal_cycle":{"kind":"atomic","traits":["elidable_iso"],"inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}}},"rotate":{"kind":"atomic","traits":["elidable_iso"],"inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}}},"repeat_unit":{"kind":"composite","inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}},"body":{"nodes":[{"id":"peal","process":"peal","state":{"plate":{"from":"inputs.plate"}}},{"id":"dispense","process":"dispense","state":{"plate":{"from":"peal.plate"}}},{"id":"seal","process":"seal","state":{"plate":{"from":"dispense.plate"}}},{"id":"thermal","process":"thermal_cycle","state":{"plate":{"from":"seal.plate"}}},{"id":"rotate","process":"rotate","state":{"plate":{"from":"thermal.plate"}}}],"returns":{"plate":{"from":"rotate.plate"}}}},"branch":{"kind":"composite","inputs":{"plate":{"type":"Plate","phase":"data"}},"outputs":{"plate":{"type":"Plate","phase":"data"}},"body":{"nodes":[{"id":"rep1","process":"repeat_unit","state":{"plate":{"from":"inputs.plate"}}},{"id":"rep2","process":"repeat_unit","state":{"plate":{"from":"rep1.plate"}}}],"returns":{"plate":{"from":"rep2.plate"}}}},"main":{"kind":"composite","inputs":{},"outputs":{},"body":{"nodes":[{"id":"source","process":"source"},{"id":"b1","process":"branch","state":{"plate":{"from":"source.plate_1"}}},{"id":"b2","process":"branch","state":{"plate":{"from":"source.plate_2"}}},{"id":"sink","process":"sink","state":{"plate_1":{"from":"b1.plate"},"plate_2":{"from":"b2.plate"}}}],"returns":{}}}},"entry":"main"},"env":{"time":{"unit":"second"},"devices":[{"id":"loader","spots":["s1","s2"]},{"id":"peal","spots":["core"]},{"id":"dispense","spots":["core"]},{"id":"seal","spots":["core"]},{"id":"rotate","spots":["core"]},{"id":"thermal_cycle_1","spots":["core"]},{"id":"thermal_cycle_2","spots":["core"]}],"transporters":[{"id":"transport"}],"transports":[{"transporter":"transport","from":"loader.s1","to":"peal.core","duration":1},{"transporter":"transport","from":"rotate.core","to":"loader.s1","duration":1},{"transporter":"transport","from":"loader.s2","to":"peal.core","duration":1},{"transporter":"transport","from":"rotate.core","to":"loader.s2","duration":1},{"transporter":"transport","from":"peal.core","to":"dispense.core","duration":1},{"transporter":"transport","from":"dispense.core","to":"seal.core","duration":1},{"transporter":"transport","from":"seal.core","to":"thermal_cycle_1.core","duration":1},{"transporter":"transport","from":"thermal_cycle_1.core","to":"rotate.core","duration":1},{"transporter":"transport","from":"seal.core","to":"thermal_cycle_2.core","duration":1},{"transporter":"transport","from":"thermal_cycle_2.core","to":"rotate.core","duration":1},{"transporter":"transport","from":"rotate.core","to":"peal.core","duration":1}],"processes":{"source":{"modes":[{"devices":["loader"],"duration":1,"output_spots":{"plate_1":"loader.s1","plate_2":"loader.s2"}}]},"sink":{"modes":[{"devices":["loader"],"duration":1,"input_spots":{"plate_1":"loader.s1","plate_2":"loader.s2"}}]},"peal":{"modes":[{"devices":["peal"],"duration":1,"input_spots":{"plate":"peal.core"},"output_spots":{"plate":"peal.core"}}]},"dispense":{"modes":[{"devices":["dispense"],"duration":3,"input_spots":{"plate":"dispense.core"},"output_spots":{"plate":"dispense.core"}}]},"seal":{"modes":[{"devices":["seal"],"duration":1,"input_spots":{"plate":"seal.core"},"output_spots":{"plate":"seal.core"}}]},"rotate":{"modes":[{"devices":["rotate"],"duration":1,"input_spots":{"plate":"rotate.core"},"output_spots":{"plate":"rotate.core"}}]},"thermal_cycle":{"modes":[{"devices":["thermal_cycle_1"],"duration":10,"input_spots":{"plate":"thermal_cycle_1.core"},"output_spots":{"plate":"thermal_cycle_1.core"}},{"devices":["thermal_cycle_2"],"duration":10,"input_spots":{"plate":"thermal_cycle_2.core"},"output_spots":{"plate":"thermal_cycle_2.core"}}]}}},"plan":{"time":{"unit":"second"},"outcome":"optimal","objective":{"kind":"makespan","value":50},"activities":[{"kind":"processing","start":0,"end":1,"process":"source","mode":"0","node":["source"],"devices":["loader"],"output_spots":{"plate_1":"loader.s1","plate_2":"loader.s2"}},{"kind":"transport","start":1,"end":2,"from_spot":"loader.s2","to_spot":"peal.core","transporter":"transport","arc":{"from":{"node":["source"],"port":"plate_2"},"to":{"node":["b2","rep1","peal"],"port":"plate"}}},{"kind":"processing","start":2,"end":3,"process":"peal","mode":"0","node":["b2","rep1","peal"],"devices":["peal"],"input_spots":{"plate":"peal.core"},"output_spots":{"plate":"peal.core"}},{"kind":"transport","start":3,"end":4,"from_spot":"peal.core","to_spot":"dispense.core","transporter":"transport","arc":{"from":{"node":["b2","rep1","peal"],"port":"plate"},"to":{"node":["b2","rep1","dispense"],"port":"plate"}}},{"kind":"transport","start":4,"end":5,"from_spot":"loader.s1","to_spot":"peal.core","transporter":"transport","arc":{"from":{"node":["source"],"port":"plate_1"},"to":{"node":["b1","rep1","peal"],"port":"plate"}}},{"kind":"processing","start":4,"end":7,"process":"dispense","mode":"0","node":["b2","rep1","dispense"],"devices":["dispense"],"input_spots":{"plate":"dispense.core"},"output_spots":{"plate":"dispense.core"}},{"kind":"processing","start":5,"end":6,"process":"peal","mode":"0","node":["b1","rep1","peal"],"devices":["peal"],"input_spots":{"plate":"peal.core"},"output_spots":{"plate":"peal.core"}},{"kind":"transport","start":7,"end":8,"from_spot":"dispense.core","to_spot":"seal.core","transporter":"transport","arc":{"from":{"node":["b2","rep1","dispense"],"port":"plate"},"to":{"node":["b2","rep1","seal"],"port":"plate"}}},{"kind":"processing","start":8,"end":9,"process":"seal","mode":"0","node":["b2","rep1","seal"],"devices":["seal"],"input_spots":{"plate":"seal.core"},"output_spots":{"plate":"seal.core"}},{"kind":"transport","start":8,"end":9,"from_spot":"peal.core","to_spot":"dispense.core","transporter":"transport","arc":{"from":{"node":["b1","rep1","peal"],"port":"plate"},"to":{"node":["b1","rep1","dispense"],"port":"plate"}}},{"kind":"transport","start":9,"end":10,"from_spot":"seal.core","to_spot":"thermal_cycle_1.core","transporter":"transport","arc":{"from":{"node":["b2","rep1","seal"],"port":"plate"},"to":{"node":["b2","rep1","thermal"],"port":"plate"}}},{"kind":"processing","start":9,"end":12,"process":"dispense","mode":"0","node":["b1","rep1","dispense"],"devices":["dispense"],"input_spots":{"plate":"dispense.core"},"output_spots":{"plate":"dispense.core"}},{"kind":"processing","start":10,"end":20,"process":"thermal_cycle","mode":"0","node":["b2","rep1","thermal"],"devices":["thermal_cycle_1"],"input_spots":{"plate":"thermal_cycle_1.core"},"output_spots":{"plate":"thermal_cycle_1.core"}},{"kind":"transport","start":12,"end":13,"from_spot":"dispense.core","to_spot":"seal.core","transporter":"transport","arc":{"from":{"node":["b1","rep1","dispense"],"port":"plate"},"to":{"node":["b1","rep1","seal"],"port":"plate"}}},{"kind":"processing","start":13,"end":14,"process":"seal","mode":"0","node":["b1","rep1","seal"],"devices":["seal"],"input_spots":{"plate":"seal.core"},"output_spots":{"plate":"seal.core"}},{"kind":"transport","start":14,"end":15,"from_spot":"seal.core","to_spot":"thermal_cycle_2.core","transporter":"transport","arc":{"from":{"node":["b1","rep1","seal"],"port":"plate"},"to":{"node":["b1","rep1","thermal"],"port":"plate"}}},{"kind":"processing","start":15,"end":25,"process":"thermal_cycle","mode":"1","node":["b1","rep1","thermal"],"devices":["thermal_cycle_2"],"input_spots":{"plate":"thermal_cycle_2.core"},"output_spots":{"plate":"thermal_cycle_2.core"}},{"kind":"transport","start":20,"end":21,"from_spot":"thermal_cycle_1.core","to_spot":"rotate.core","transporter":"transport","arc":{"from":{"node":["b2","rep1","thermal"],"port":"plate"},"to":{"node":["b2","rep1","rotate"],"port":"plate"}}},{"kind":"processing","start":21,"end":22,"process":"rotate","mode":"0","node":["b2","rep1","rotate"],"devices":["rotate"],"input_spots":{"plate":"rotate.core"},"output_spots":{"plate":"rotate.core"}},{"kind":"transport","start":22,"end":23,"from_spot":"rotate.core","to_spot":"peal.core","transporter":"transport","arc":{"from":{"node":["b2","rep1","rotate"],"port":"plate"},"to":{"node":["b2","rep2","peal"],"port":"plate"}}},{"kind":"processing","start":23,"end":24,"process":"peal","mode":"0","node":["b2","rep2","peal"],"devices":["peal"],"input_spots":{"plate":"peal.core"},"output_spots":{"plate":"peal.core"}},{"kind":"transport","start":24,"end":25,"from_spot":"peal.core","to_spot":"dispense.core","transporter":"transport","arc":{"from":{"node":["b2","rep2","peal"],"port":"plate"},"to":{"node":["b2","rep2","dispense"],"port":"plate"}}},{"kind":"transport","start":25,"end":26,"from_spot":"thermal_cycle_2.core","to_spot":"rotate.core","transporter":"transport","arc":{"from":{"node":["b1","rep1","thermal"],"port":"plate"},"to":{"node":["b1","rep1","rotate"],"port":"plate"}}},{"kind":"processing","start":25,"end":28,"process":"dispense","mode":"0","node":["b2","rep2","dispense"],"devices":["dispense"],"input_spots":{"plate":"dispense.core"},"output_spots":{"plate":"dispense.core"}},{"kind":"processing","start":26,"end":27,"process":"rotate","mode":"0","node":["b1","rep1","rotate"],"devices":["rotate"],"input_spots":{"plate":"rotate.core"},"output_spots":{"plate":"rotate.core"}},{"kind":"transport","start":27,"end":28,"from_spot":"rotate.core","to_spot":"peal.core","transporter":"transport","arc":{"from":{"node":["b1","rep1","rotate"],"port":"plate"},"to":{"node":["b1","rep2","peal"],"port":"plate"}}},{"kind":"processing","start":28,"end":29,"process":"peal","mode":"0","node":["b1","rep2","peal"],"devices":["peal"],"input_spots":{"plate":"peal.core"},"output_spots":{"plate":"peal.core"}},{"kind":"transport","start":28,"end":29,"from_spot":"dispense.core","to_spot":"seal.core","transporter":"transport","arc":{"from":{"node":["b2","rep2","dispense"],"port":"plate"},"to":{"node":["b2","rep2","seal"],"port":"plate"}}},{"kind":"processing","start":29,"end":30,"process":"seal","mode":"0","node":["b2","rep2","seal"],"devices":["seal"],"input_spots":{"plate":"seal.core"},"output_spots":{"plate":"seal.core"}},{"kind":"transport","start":29,"end":30,"from_spot":"peal.core","to_spot":"dispense.core","transporter":"transport","arc":{"from":{"node":["b1","rep2","peal"],"port":"plate"},"to":{"node":["b1","rep2","dispense"],"port":"plate"}}},{"kind":"transport","start":30,"end":31,"from_spot":"seal.core","to_spot":"thermal_cycle_2.core","transporter":"transport","arc":{"from":{"node":["b2","rep2","seal"],"port":"plate"},"to":{"node":["b2","rep2","thermal"],"port":"plate"}}},{"kind":"processing","start":30,"end":33,"process":"dispense","mode":"0","node":["b1","rep2","dispense"],"devices":["dispense"],"input_spots":{"plate":"dispense.core"},"output_spots":{"plate":"dispense.core"}},{"kind":"processing","start":31,"end":41,"process":"thermal_cycle","mode":"1","node":["b2","rep2","thermal"],"devices":["thermal_cycle_2"],"input_spots":{"plate":"thermal_cycle_2.core"},"output_spots":{"plate":"thermal_cycle_2.core"}},{"kind":"transport","start":33,"end":34,"from_spot":"dispense.core","to_spot":"seal.core","transporter":"transport","arc":{"from":{"node":["b1","rep2","dispense"],"port":"plate"},"to":{"node":["b1","rep2","seal"],"port":"plate"}}},{"kind":"processing","start":34,"end":35,"process":"seal","mode":"0","node":["b1","rep2","seal"],"devices":["seal"],"input_spots":{"plate":"seal.core"},"output_spots":{"plate":"seal.core"}},{"kind":"transport","start":35,"end":36,"from_spot":"seal.core","to_spot":"thermal_cycle_1.core","transporter":"transport","arc":{"from":{"node":["b1","rep2","seal"],"port":"plate"},"to":{"node":["b1","rep2","thermal"],"port":"plate"}}},{"kind":"processing","start":36,"end":46,"process":"thermal_cycle","mode":"0","node":["b1","rep2","thermal"],"devices":["thermal_cycle_1"],"input_spots":{"plate":"thermal_cycle_1.core"},"output_spots":{"plate":"thermal_cycle_1.core"}},{"kind":"transport","start":41,"end":42,"from_spot":"thermal_cycle_2.core","to_spot":"rotate.core","transporter":"transport","arc":{"from":{"node":["b2","rep2","thermal"],"port":"plate"},"to":{"node":["b2","rep2","rotate"],"port":"plate"}}},{"kind":"processing","start":42,"end":43,"process":"rotate","mode":"0","node":["b2","rep2","rotate"],"devices":["rotate"],"input_spots":{"plate":"rotate.core"},"output_spots":{"plate":"rotate.core"}},{"kind":"transport","start":43,"end":44,"from_spot":"rotate.core","to_spot":"loader.s2","transporter":"transport","arc":{"from":{"node":["b2","rep2","rotate"],"port":"plate"},"to":{"node":["sink"],"port":"plate_2"}}},{"kind":"transport","start":46,"end":47,"from_spot":"thermal_cycle_1.core","to_spot":"rotate.core","transporter":"transport","arc":{"from":{"node":["b1","rep2","thermal"],"port":"plate"},"to":{"node":["b1","rep2","rotate"],"port":"plate"}}},{"kind":"processing","start":47,"end":48,"process":"rotate","mode":"0","node":["b1","rep2","rotate"],"devices":["rotate"],"input_spots":{"plate":"rotate.core"},"output_spots":{"plate":"rotate.core"}},{"kind":"transport","start":48,"end":49,"from_spot":"rotate.core","to_spot":"loader.s1","transporter":"transport","arc":{"from":{"node":["b1","rep2","rotate"],"port":"plate"},"to":{"node":["sink"],"port":"plate_1"}}},{"kind":"processing","start":49,"end":50,"process":"sink","mode":"0","node":["sink"],"devices":["loader"],"input_spots":{"plate_1":"loader.s1","plate_2":"loader.s2"}}],"meta":{"workflow":"examples/outputs/plate_batch.workflow.yaml","environment":"examples/outputs/plate_batch.env.yaml"}},"source":{"workflow":"outputs/plate_batch.workflow.yaml","env":"outputs/plate_batch.env.yaml","plan":"outputs/plate_batch.plan.yaml"}}}}</script>
+
+<script>
+"use strict";
+
+/* ══ data ═══════════════════════════════════════════════════════════════ */
+const DB = JSON.parse(document.getElementById("datasets").textContent);
+
+/* ══ state ══════════════════════════════════════════════════════════════ */
+const state = {
+  ds: "plate_batch",
+  view: "device",
+  expanded: new Set(),
+  sel: null,          // {kind:"act", i} | {kind:"node", key}
+  gz: 1,
+  tz: 1,
+  split: 46,
+};
+let scene = null;
+
+/* ══ helpers ════════════════════════════════════════════════════════════ */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const trunc = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+const devOf = (spot) => String(spot || "").split(".")[0];
+const pathKey = (p) => (p || []).join(".");
+const unitAbbr = (u) => ({ second: "s", minute: "min", hour: "h" }[u] || u || "");
+
+/* ══ scene ══════════════════════════════════════════════════════════════ */
+function buildTree(wf) {
+  const mk = (path, id, procName, binding, isState) => {
+    const def = wf.processes[procName] || { kind: "atomic", inputs: {}, outputs: {} };
+    const n = {
+      id, path, key: pathKey(path), proc: procName, kind: def.kind,
+      inputs: Object.keys(def.inputs || {}),
+      outputs: Object.keys(def.outputs || {}),
+      binding: binding || {}, stateBind: isState || {},
+      children: [], returns: {},
+    };
+    if (def.kind === "composite") {
+      for (const inv of (def.body && def.body.nodes) || []) {
+        const st = inv.state || {}, da = inv.data || {};
+        n.children.push(mk(path.concat(inv.id), inv.id, inv.process, Object.assign({}, st, da), st));
+      }
+      n.returns = (def.body && def.body.returns) || {};
+    }
+    n.atomicCount = n.kind === "composite" ? n.children.reduce((s, c) => s + c.atomicCount, 0) : 1;
+    return n;
+  };
+  return mk([], wf.entry, wf.entry, {}, {});
+}
+
+function mergeSpans(spans) {
+  if (!spans.length) return 0;
+  spans.sort((a, b) => a[0] - b[0]);
+  let total = 0, [cs, ce] = spans[0];
+  for (let i = 1; i < spans.length; i++) {
+    const [s, e] = spans[i];
+    if (s > ce) { total += ce - cs; cs = s; ce = e; } else ce = Math.max(ce, e);
+  }
+  return total + (ce - cs);
+}
+
+function buildScene(key) {
+  const d = DB.sets[key];
+  const plan = d.plan, env = d.env, wf = d.workflow;
+  const acts = (plan.activities || []).map((a, i) => Object.assign({ _i: i, status: a.status || "pending" }, a));
+  const unit = (plan.time && plan.time.unit) || (env.time && env.time.unit) || "";
+
+  const tMax = Math.max(1, ...acts.map((a) => a.end || 0));
+  const obj = plan.objective || {};
+  const makespan = typeof obj.value === "number" ? obj.value : tMax;
+
+  // cross-reference indices
+  const byNode = new Map();      // pathKey -> [activity]
+  const byArc = new Map();       // arcKey  -> [activity]
+  const arcKey = (arc) => arc ? pathKey(arc.from.node) + "|" + arc.from.port + "→" + pathKey(arc.to.node) + "|" + arc.to.port : "";
+  for (const a of acts) {
+    if (a.kind === "processing" && a.node) {
+      const k = pathKey(a.node);
+      if (!byNode.has(k)) byNode.set(k, []);
+      byNode.get(k).push(a);
+    }
+    if (a.arc) {
+      const k = arcKey(a.arc);
+      a._arcKey = k;
+      if (!byArc.has(k)) byArc.set(k, []);
+      byArc.get(k).push(a);
+    }
+  }
+
+  // device occupancy (processing devices + transport endpoints, §4.5)
+  const occ = new Map();
+  const push = (dev, s, e) => { if (!dev) return; if (!occ.has(dev)) occ.set(dev, []); occ.get(dev).push([s, e]); };
+  for (const a of acts) {
+    if (a.kind === "processing") (a.devices || []).forEach((dv) => push(dv, a.start, a.end));
+    else if (a.kind === "transport") {
+      push(devOf(a.from_spot), a.start, a.end);
+      if (devOf(a.to_spot) !== devOf(a.from_spot)) push(devOf(a.to_spot), a.start, a.end);
+      if (a.transporter) push(a.transporter, a.start, a.end);
+    } else if (a.kind === "replenishment") { push(a.device, a.start, a.end); push(a.replenisher, a.start, a.end); }
+  }
+  const util = [];
+  for (const [dev, spans] of occ) util.push({ id: dev, pct: makespan ? mergeSpans(spans.slice()) / makespan : 0 });
+  util.sort((a, b) => b.pct - a.pct);
+
+  return {
+    key, label: d.label, blurb: d.blurb, source: d.source,
+    wf, env, plan, acts, unit, makespan, tMax, obj,
+    tree: buildTree(wf), byNode, byArc, util,
+    counts: {
+      processing: acts.filter((a) => a.kind === "processing").length,
+      transport: acts.filter((a) => a.kind === "transport").length,
+      relay: acts.filter((a) => a.kind === "relay").length,
+    },
+  };
+}
+
+/* ══ graph layout ═══════════════════════════════════════════════════════ */
+const NW = 172, HDR = 22, ROW = 15, PADB = 7;
+const GAPX = 58, GAPY = 18, CPAD = 13, CHDR = 24, PORTGUT = 66;
+
+function layout(n) {
+  const open = n.kind === "composite" && (n.key === "" || state.expanded.has(n.key));
+  n.open = open;
+  if (!open) {
+    const rows = Math.max(n.inputs.length, n.outputs.length, 1);
+    n.w = NW; n.h = HDR + rows * ROW + PADB;
+    return;
+  }
+  n.children.forEach(layout);
+  const byId = new Map(n.children.map((c) => [c.id, c]));
+  const lv = new Map();
+  const calc = (c, seen) => {
+    if (lv.has(c.id)) return lv.get(c.id);
+    if (seen.has(c.id)) return 0;
+    seen.add(c.id);
+    let L = 0;
+    for (const b of Object.values(c.binding)) {
+      const src = String(b && b.from || "").split(".")[0];
+      if (byId.has(src) && src !== c.id) L = Math.max(L, calc(byId.get(src), seen) + 1);
+    }
+    lv.set(c.id, L);
+    return L;
+  };
+  n.children.forEach((c) => calc(c, new Set()));
+
+  const cols = [];
+  n.children.forEach((c) => { const L = lv.get(c.id) || 0; (cols[L] = cols[L] || []).push(c); });
+
+  const left = CPAD + (n.inputs.length ? PORTGUT : 0);
+  const right = CPAD + (Object.keys(n.returns).length ? PORTGUT : 0);
+  let x = left, maxColH = 0;
+  const colGeom = [];
+  for (const col of cols) {
+    if (!col) continue;
+    const w = Math.max(...col.map((c) => c.w));
+    const h = col.reduce((s, c) => s + c.h, 0) + GAPY * (col.length - 1);
+    colGeom.push({ col, x, w, h });
+    maxColH = Math.max(maxColH, h);
+    x += w + GAPX;
+  }
+  const contentW = Math.max(x - GAPX - left, 40);
+  for (const g of colGeom) {
+    let y = CHDR + CPAD + (maxColH - g.h) / 2;
+    for (const c of g.col) { c.x = g.x + (g.w - c.w) / 2; c.y = y; y += c.h + GAPY; }
+  }
+  n.w = left + contentW + right;
+  n.h = CHDR + CPAD + Math.max(maxColH, 40) + CPAD;
+}
+
+function anchorIn(n, port) {
+  if (n.open) {
+    const i = n.inputs.indexOf(port), k = n.inputs.length;
+    return { x: 0, y: CHDR + (n.h - CHDR) * (i + 1) / (k + 1) };
+  }
+  const i = Math.max(0, n.inputs.indexOf(port));
+  return { x: 0, y: HDR + i * ROW + ROW / 2 };
+}
+function anchorOut(n, port) {
+  if (n.open) {
+    const outs = Object.keys(n.returns);
+    const i = outs.indexOf(port), k = outs.length;
+    return { x: n.w, y: CHDR + (n.h - CHDR) * (i + 1) / (k + 1) };
+  }
+  const i = Math.max(0, n.outputs.indexOf(port));
+  return { x: n.w, y: HDR + i * ROW + ROW / 2 };
+}
+
+/* visible node that stands in for a full node path */
+function visibleFor(path) {
+  let cur = scene.tree;
+  if (!path || !path.length) return "";
+  for (let d = 0; d < path.length; d++) {
+    const nx = cur.children.find((c) => c.id === path[d]);
+    if (!nx) return cur.key;
+    cur = nx;
+    if (!cur.open) return cur.key;
+  }
+  return cur.key;
+}
+
+/* ══ selection ══════════════════════════════════════════════════════════ */
+function actPaths(a) {
+  if (a.kind === "processing") return [a.node || []];
+  if (a.arc) return [a.arc.from.node || [], a.arc.to.node || []];
+  return [];
+}
+function litActs() {
+  const s = state.sel;
+  if (!s) return null;
+  const set = new Set();
+  if (s.kind === "act") {
+    const a = scene.acts[s.i];
+    set.add(a._i);
+    if (a._arcKey) (scene.byArc.get(a._arcKey) || []).forEach((x) => set.add(x._i));
+  } else {
+    const pre = s.key === "" ? [] : s.key.split(".");
+    for (const a of scene.acts) {
+      for (const p of actPaths(a)) {
+        if (p.length >= pre.length && pre.every((seg, i) => p[i] === seg)) { set.add(a._i); break; }
+      }
+    }
+  }
+  return set;
+}
+function litNodes() {
+  const s = state.sel;
+  const lit = new Set(), anc = new Set();
+  if (!s) return { lit, anc };
+  if (s.kind === "node") {
+    lit.add(s.key);
+    const p = s.key === "" ? [] : s.key.split(".");
+    for (let i = 1; i < p.length; i++) anc.add(p.slice(0, i).join("."));
+  } else {
+    const a = scene.acts[s.i];
+    for (const p of actPaths(a)) {
+      if (!p.length) continue;
+      lit.add(visibleFor(p));
+      for (let i = 1; i < p.length; i++) anc.add(p.slice(0, i).join("."));
+    }
+  }
+  for (const k of lit) anc.delete(k);
+  return { lit, anc };
+}
+
+/* ══ render: graph ══════════════════════════════════════════════════════ */
+function renderGraph() {
+  const root = scene.tree;
+  layout(root);
+  const { lit, anc } = litNodes();
+  const active = !!state.sel;
+  // z-order: open container shells first, then edges, then leaf boxes on top —
+  // otherwise a container's own fill hides the edges that run inside it.
+  const shells = [];
+  const leaves = [];
+  const edges = [];
+
+  const drawNode = (n, ox, oy, depth) => {
+    const X = ox + (n.x || 0), Y = oy + (n.y || 0);
+    n._ax = X; n._ay = Y;
+    const cls = ["gnode", n.kind, n.open ? "open" : "", "hit",
+      lit.has(n.key) ? "lit" : "", anc.has(n.key) ? "anc" : "",
+      active && !lit.has(n.key) && !anc.has(n.key) ? "dim" : ""].filter(Boolean).join(" ");
+    const g = [`<g class="${cls}" data-key="${esc(n.key)}" transform="translate(${X},${Y})">`];
+    g.push(`<rect class="box" width="${n.w}" height="${n.h}"/>`);
+
+    if (n.open) {
+      g.push(`<text class="nid" x="10" y="15">${esc(n.id)}</text>`);
+      g.push(`<text class="nproc" x="${n.w - 10}" y="15" text-anchor="end">${esc(n.proc)} · ${n.atomicCount} steps</text>`);
+      g.push(`<line class="hdrline" x1="0" y1="${CHDR}" x2="${n.w}" y2="${CHDR}"/>`);
+      g.push(`<text class="chev" x="${n.w - 10}" y="${n.h - 7}" text-anchor="end">▾ collapse</text>`);
+      n.inputs.forEach((p) => {
+        const a = anchorIn(n, p);
+        g.push(`<circle class="pdot" cx="0" cy="${a.y}" r="2.6"/>`);
+        g.push(`<text class="pname" x="7" y="${a.y + 3}">${esc(trunc(p, 10))}</text>`);
+      });
+      Object.keys(n.returns).forEach((p) => {
+        const a = anchorOut(n, p);
+        g.push(`<circle class="pdot" cx="${n.w}" cy="${a.y}" r="2.6"/>`);
+        g.push(`<text class="pname" x="${n.w - 7}" y="${a.y + 3}" text-anchor="end">${esc(trunc(p, 10))}</text>`);
+      });
+    } else {
+      g.push(`<text class="nid" x="9" y="14">${esc(trunc(n.id, 14))}</text>`);
+      if (n.kind === "composite") {
+        const bw = 34;
+        g.push(`<rect class="badge" x="${n.w - bw - 8}" y="4" width="${bw}" height="13"/>`);
+        g.push(`<text class="btext" x="${n.w - bw / 2 - 8}" y="13.5" text-anchor="middle">▸ ×${n.atomicCount}</text>`);
+      } else if (n.proc !== n.id) {
+        g.push(`<text class="nproc" x="${n.w - 9}" y="14" text-anchor="end">${esc(trunc(n.proc, 15))}</text>`);
+      }
+      g.push(`<line class="hdrline" x1="0" y1="${HDR - 4}" x2="${n.w}" y2="${HDR - 4}"/>`);
+      n.inputs.forEach((p, i) => {
+        const y = HDR + i * ROW + ROW / 2;
+        g.push(`<circle class="pdot" cx="0" cy="${y}" r="2.6"/>`);
+        g.push(`<text class="pname" x="7" y="${y + 3}">${esc(trunc(p, 11))}</text>`);
+      });
+      n.outputs.forEach((p, i) => {
+        const y = HDR + i * ROW + ROW / 2;
+        g.push(`<circle class="pdot" cx="${n.w}" cy="${y}" r="2.6"/>`);
+        g.push(`<text class="pname" x="${n.w - 7}" y="${y + 3}" text-anchor="end">${esc(trunc(p, 11))}</text>`);
+      });
+    }
+    g.push("</g>");
+    (n.open ? shells : leaves).push(g.join(""));
+
+    if (n.open) {
+      const byId = new Map(n.children.map((c) => [c.id, c]));
+      for (const c of n.children) {
+        for (const [port, b] of Object.entries(c.binding)) {
+          const from = String(b && b.from || "");
+          const [srcId, srcPort] = from.split(".");
+          const tgt = anchorIn(c, port);
+          let s, srcKey;
+          if (srcId === "inputs") {
+            const a = anchorIn(n, srcPort);
+            s = { x: X + a.x, y: Y + a.y }; srcKey = n.key;
+          } else if (byId.has(srcId)) {
+            const sn = byId.get(srcId);
+            const a = anchorOut(sn, srcPort);
+            s = { x: X + sn.x + a.x, y: Y + sn.y + a.y }; srcKey = sn.key;
+          } else continue;
+          const e = { x: X + c.x + tgt.x, y: Y + c.y + tgt.y };
+          const isState = Object.prototype.hasOwnProperty.call(c.stateBind, port);
+          edges.push({ s, e, data: !isState, srcKey, tgtKey: c.key });
+        }
+      }
+      for (const [outPort, b] of Object.entries(n.returns)) {
+        const from = String(b && b.from || "");
+        const [srcId, srcPort] = from.split(".");
+        const sn = n.children.find((c) => c.id === srcId);
+        if (!sn) continue;
+        const a = anchorOut(sn, srcPort), t = anchorOut(n, outPort);
+        edges.push({ s: { x: X + sn.x + a.x, y: Y + sn.y + a.y }, e: { x: X + t.x, y: Y + t.y }, data: false, srcKey: sn.key, tgtKey: n.key });
+      }
+      for (const c of n.children) drawNode(c, X, Y, depth + 1);
+    }
+  };
+
+  root.x = 0; root.y = 0;
+  drawNode(root, 0, 0, 0);
+
+  const epart = edges.map((ed) => {
+    const on = lit.has(ed.srcKey) || lit.has(ed.tgtKey);
+    const cls = ["edge", ed.data ? "data" : "", on ? "lit" : "", active && !on ? "dim" : ""].filter(Boolean).join(" ");
+    const dx = Math.max(22, (ed.e.x - ed.s.x) / 2);
+    const d = `M ${ed.s.x} ${ed.s.y} C ${ed.s.x + dx} ${ed.s.y}, ${ed.e.x - dx} ${ed.e.y}, ${ed.e.x} ${ed.e.y}`;
+    const ah = `<path class="arrowhead${on ? " lit" : ""}${active && !on ? " dim" : ""}" d="M ${ed.e.x} ${ed.e.y} l -5 -2.6 l 0 5.2 z"/>`;
+    return `<path class="${cls}" d="${d}"/>${ah}`;
+  }).join("");
+
+  const W = root.w + 4, H = root.h + 4;
+  const svg = $("graphSvg");
+  svg.setAttribute("width", Math.round(W * state.gz));
+  svg.setAttribute("height", Math.round(H * state.gz));
+  svg.setAttribute("viewBox", `-2 -2 ${W} ${H}`);
+  svg.innerHTML = shells.join("") + epart + leaves.join("");
+
+  $("graphHint").textContent = `${scene.wf.entry} · ${root.atomicCount} atomic steps · click a box to link it to the plan`;
+}
+
+/* ══ render: gantt ══════════════════════════════════════════════════════ */
+const LANE = 27, BARH = 13, GUTW = 176, PLEFT = 8;
+
+function niceStep(span) {
+  const raw = span / 9;
+  for (const s of [1, 2, 5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600]) if (s >= raw) return s;
+  return Math.ceil(raw / 3600) * 3600;
+}
+
+function laneModel() {
+  const a = scene.acts, env = scene.env;
+  if (state.view === "device") {
+    const lanes = [], seen = new Set();
+    for (const d of env.devices || []) { lanes.push({ id: d.id, label: d.id, kind: "device" }); seen.add(d.id); }
+    for (const t of env.transporters || []) if (!seen.has(t.id)) { lanes.push({ id: t.id, label: t.id, kind: "transporter" }); seen.add(t.id); }
+    for (const r of env.replenishers || []) if (!seen.has(r.id)) { lanes.push({ id: r.id, label: r.id, kind: "replenisher" }); seen.add(r.id); }
+    const idx = new Map(lanes.map((l, i) => [l.id, i]));
+    const bars = [];
+    for (const act of a) {
+      if (act.kind === "processing") {
+        for (const d of act.devices || []) if (idx.has(d)) bars.push({ lane: idx.get(d), a: act, cls: "proc", label: act.node ? act.node[act.node.length - 1] : act.process });
+        if (!(act.devices || []).length) bars.push({ lane: -1, a: act, cls: "proc", label: act.process });
+      } else if (act.kind === "transport") {
+        if (act.transporter && idx.has(act.transporter)) bars.push({ lane: idx.get(act.transporter), a: act, cls: "xfer", label: devOf(act.from_spot) + "→" + devOf(act.to_spot) });
+        for (const s of [act.from_spot, act.to_spot]) {
+          const d = devOf(s);
+          if (idx.has(d) && !(bars.length && bars[bars.length - 1].a === act && bars[bars.length - 1].lane === idx.get(d)))
+            bars.push({ lane: idx.get(d), a: act, cls: act.transporter ? "ghost" : "xfer", label: "" });
+        }
+      } else if (act.kind === "relay") {
+        const d = devOf(act.spot);
+        if (idx.has(d)) bars.push({ lane: idx.get(d), a: act, cls: "relay", label: "" });
+      } else if (act.kind === "replenishment") {
+        for (const d of [act.device, act.replenisher]) if (idx.has(d)) bars.push({ lane: idx.get(d), a: act, cls: "proc", label: "refill" });
+      }
+    }
+    return { lanes, bars: bars.filter((b) => b.lane >= 0) };
+  }
+
+  if (state.view === "activity") {
+    const ord = a.slice().sort((x, y) => x.start - y.start || x._i - y._i);
+    const lanes = ord.map((act) => ({ id: "a" + act._i, label: shortLabel(act), kind: act.kind }));
+    const bars = ord.map((act, i) => ({ lane: i, a: act, cls: act.kind === "processing" ? "proc" : act.kind === "relay" ? "relay" : "xfer", label: "" }));
+    return { lanes, bars };
+  }
+
+  // flow: one lane per top-level node of the entry composite
+  const groups = [], gi = new Map();
+  const groupOf = (act) => {
+    const ps = actPaths(act).filter((p) => p.length);
+    if (!ps.length) return "— boundary";
+    return ps[0][0];
+  };
+  for (const act of a) {
+    const g = groupOf(act);
+    if (!gi.has(g)) { gi.set(g, groups.length); groups.push(g); }
+  }
+  const lanes = groups.map((g) => ({ id: g, label: g, kind: "group" }));
+  const bars = a.map((act) => ({
+    lane: gi.get(groupOf(act)), a: act,
+    cls: act.kind === "processing" ? "proc" : act.kind === "relay" ? "relay" : "xfer",
+    label: act.kind === "processing" ? (act.node ? act.node[act.node.length - 1] : act.process) : "",
+  }));
+  return { lanes, bars };
+}
+
+function shortLabel(a) {
+  if (a.kind === "processing") return (a.node || [a.process]).join("/");
+  if (a.kind === "transport") return devOf(a.from_spot) + " → " + devOf(a.to_spot);
+  if (a.kind === "relay") return "relay @ " + a.spot;
+  if (a.kind === "replenishment") return "refill " + a.device;
+  return a.kind;
+}
+
+function renderGantt() {
+  const isTable = state.view === "table";
+  $("ganttBody").hidden = isTable;
+  $("tableWrap").hidden = !isTable;
+  if (isTable) return renderTable();
+
+  const { lanes, bars } = laneModel();
+  const litSet = litActs();
+  const active = !!state.sel;
+  const H = Math.max(lanes.length * LANE + 6, 60);
+  const tmax = Math.max(scene.makespan, scene.tMax);
+  const baseW = Math.max(560, ($("plotScroll").clientWidth || 700) - 24);
+  const W = Math.max(220, baseW * state.tz);
+  const sx = (t) => PLEFT + (t / (tmax || 1)) * (W - PLEFT * 2);
+
+  /* gutter */
+  const gut = [];
+  lanes.forEach((l, i) => {
+    const y = i * LANE;
+    if (i % 2) gut.push(`<rect class="lane-bg alt" x="0" y="${y}" width="${GUTW}" height="${LANE}"/>`);
+    gut.push(`<text class="lane-label" x="10" y="${y + LANE / 2 + 3.5}">${esc(trunc(l.label, 21))}</text>`);
+    if (l.kind !== "group") gut.push(`<text class="lane-kind" x="${GUTW - 8}" y="${y + LANE / 2 + 3}" text-anchor="end">${esc(l.kind.slice(0, 5))}</text>`);
+    gut.push(`<line class="lane-rule" x1="0" y1="${y + LANE}" x2="${GUTW}" y2="${y + LANE}"/>`);
+  });
+  const gs = $("gutSvg");
+  gs.setAttribute("width", GUTW); gs.setAttribute("height", H);
+  gs.innerHTML = gut.join("");
+
+  /* axis */
+  const step = niceStep(tmax);
+  const ticks = [];
+  for (let t = 0; t <= tmax + 1e-9; t += step) ticks.push(t);
+  const ax = [`<text class="axis-cap" x="6" y="11">TIME (${esc(unitAbbr(scene.unit).toUpperCase())})</text>`];
+  ticks.forEach((t) => ax.push(`<text class="tick-tx" x="${sx(t)}" y="23" text-anchor="middle">${t}</text>`));
+  if (typeof scene.plan.now === "number") ax.push(`<text class="nowcap" x="${sx(scene.plan.now)}" y="11" text-anchor="middle">now</text>`);
+  const asvg = $("axisSvg");
+  asvg.setAttribute("width", W); asvg.setAttribute("height", 27);
+  asvg.innerHTML = ax.join("");
+
+  /* plot */
+  const p = [`<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-ln" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`];
+  lanes.forEach((l, i) => {
+    const y = i * LANE;
+    if (i % 2) p.push(`<rect class="lane-bg alt" x="0" y="${y}" width="${W}" height="${LANE}"/>`);
+    p.push(`<line class="lane-rule" x1="0" y1="${y + LANE}" x2="${W}" y2="${y + LANE}"/>`);
+  });
+  ticks.forEach((t) => p.push(`<line class="grid-ln" x1="${sx(t)}" y1="0" x2="${sx(t)}" y2="${H}"/>`));
+
+  for (const b of bars) {
+    const a = b.a, y = b.lane * LANE + (LANE - BARH) / 2;
+    const on = !litSet || litSet.has(a._i);
+    const dim = active && !on ? " dim" : "";
+    const done = a.status === "completed" ? " done" : "";
+    const hl = litSet && litSet.has(a._i) ? " lit" : "";
+    if (b.cls === "relay") {
+      const cx = sx(a.start), cy = y + BARH / 2;
+      p.push(`<rect class="bar relay${dim}${hl}" data-act="${a._i}" x="${cx - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${cx} ${cy})"/>`);
+      continue;
+    }
+    const x0 = sx(a.start), x1 = sx(a.end);
+    const w = Math.max(2.5, x1 - x0 - 2);
+    const h = b.cls === "ghost" ? BARH - 4 : BARH;
+    const yy = b.cls === "ghost" ? y + 2 : y;
+    p.push(`<rect class="bar ${b.cls}${dim}${done}${hl}" data-act="${a._i}" x="${x0 + 1}" y="${yy}" width="${w}" height="${h}"/>`);
+    if (b.label && w > b.label.length * 5.8 + 8) {
+      p.push(`<text class="bar-tx" x="${x0 + 5}" y="${y + BARH - 3.5}">${esc(b.label)}</text>`);
+    } else if (b.label && b.cls !== "ghost" && x1 + 4 + b.label.length * 5.8 < W) {
+      p.push(`<text class="bar-tx out" x="${x1 + 4}" y="${y + BARH - 3.5}">${esc(trunc(b.label, 18))}</text>`);
+    }
+  }
+  if (typeof scene.plan.now === "number") {
+    const nx = sx(scene.plan.now);
+    p.push(`<line class="nowline" x1="${nx}" y1="0" x2="${nx}" y2="${H}"/>`);
+  }
+
+  const ps = $("plotSvg");
+  ps.setAttribute("width", W); ps.setAttribute("height", H);
+  ps.innerHTML = p.join("");
+}
+
+function renderTable() {
+  const litSet = litActs();
+  const rows = scene.acts.slice().sort((a, b) => a.start - b.start || a._i - b._i).map((a) => {
+    const where = a.kind === "processing" ? (a.devices || []).join(", ")
+      : a.kind === "transport" ? `${a.from_spot} → ${a.to_spot}`
+      : a.kind === "relay" ? a.spot : a.device || "";
+    const via = a.kind === "transport" ? (a.transporter || "same spot") : a.kind === "processing" ? `mode ${a.mode}` : "";
+    return `<tr class="row${litSet && litSet.has(a._i) ? " lit" : ""}" data-act="${a._i}">
+      <td><span class="kindchip ${esc(a.kind)}">${esc(a.kind)}</span></td>
+      <td class="mono">${esc(shortLabel(a))}</td>
+      <td class="mono">${esc(where)}</td>
+      <td class="mono">${esc(via)}</td>
+      <td class="n mono">${a.start}</td><td class="n mono">${a.end}</td><td class="n mono">${a.end - a.start}</td>
+      <td class="mono">${esc(a.status)}</td></tr>`;
+  }).join("");
+  $("tableWrap").innerHTML = `<table><thead><tr>
+    <th>Kind</th><th>What</th><th>Where</th><th>Via</th>
+    <th style="text-align:right">Start</th><th style="text-align:right">End</th>
+    <th style="text-align:right">Dur</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ══ render: inspector + readouts ═══════════════════════════════════════ */
+function renderInspector() {
+  const s = state.sel;
+  const el = $("insp");
+  const blocks = [];
+
+  if (!s) {
+    blocks.push(`<div><h3>Dataset</h3><div class="lead">${esc(scene.label)}</div>
+      <div class="note" style="margin-top:7px">${esc(scene.blurb)}</div></div>`);
+    const o = scene.obj;
+    blocks.push(`<div><h3>Solve</h3><dl>
+      <dt>outcome</dt><dd>${esc(scene.plan.outcome || "—")}</dd>
+      <dt>objective</dt><dd>${esc(Array.isArray(o.kind) ? o.kind.join(", ") : (o.kind || "—"))}</dd>
+      <dt>value</dt><dd>${esc(Array.isArray(o.value) ? o.value.join(", ") : (o.value != null ? o.value : "—"))} ${esc(unitAbbr(scene.unit))}</dd>
+      ${typeof scene.plan.now === "number" ? `<dt>now</dt><dd>${scene.plan.now} ${esc(unitAbbr(scene.unit))}</dd>` : ""}
+      </dl></div>`);
+    blocks.push(`<div><h3>Activities</h3><dl>
+      <dt>processing</dt><dd>${scene.counts.processing}</dd>
+      <dt>transport</dt><dd>${scene.counts.transport}</dd>
+      ${scene.counts.relay ? `<dt>relay</dt><dd>${scene.counts.relay}</dd>` : ""}
+      </dl></div>`);
+    const u = scene.util.slice(0, 9).map((x) => {
+      const isT = (scene.env.transporters || []).some((t) => t.id === x.id);
+      return `<div class="ubar"><span class="t">${esc(x.id)}</span>
+        <span class="track"><span class="fill${isT ? " x" : ""}" style="width:${Math.round(x.pct * 100)}%"></span></span>
+        <span class="p num">${Math.round(x.pct * 100)}%</span></div>`;
+    }).join("");
+    blocks.push(`<div><h3>Occupancy</h3><div class="util">${u}</div>
+      <div class="note" style="margin-top:8px">Share of the makespan each machine is held — a transport holds its source and destination devices too.</div></div>`);
+  } else if (s.kind === "act") {
+    const a = scene.acts[s.i];
+    blocks.push(`<div><h3>${esc(a.kind)}</h3><div class="lead">${esc(shortLabel(a))}</div></div>`);
+    const rows = [];
+    rows.push(["start", `${a.start} ${unitAbbr(scene.unit)}`], ["end", `${a.end} ${unitAbbr(scene.unit)}`], ["duration", `${a.end - a.start} ${unitAbbr(scene.unit)}`], ["status", a.status]);
+    if (a.kind === "processing") {
+      rows.push(["process", a.process], ["mode", a.mode], ["node path", (a.node || []).join(" / ")]);
+      if (a.devices) rows.push(["devices", a.devices.join(", ")]);
+      for (const [k, v] of Object.entries(a.input_spots || {})) rows.push([`in · ${k}`, v]);
+      for (const [k, v] of Object.entries(a.output_spots || {})) rows.push([`out · ${k}`, v]);
+    } else if (a.kind === "transport") {
+      rows.push(["from", a.from_spot], ["to", a.to_spot], ["transporter", a.transporter || "— (same spot)"]);
+      if (a.seq != null) rows.push(["leg", a.seq]);
+    } else if (a.kind === "relay") {
+      rows.push(["spot", a.spot], ["leg", a.seq]);
+    }
+    blocks.push(`<div><h3>Fields</h3><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div>`);
+    if (a.arc) {
+      const f = a.arc.from, t = a.arc.to;
+      const fmt = (e) => `${e.node.length ? e.node.join("/") : "⟨interface⟩"} . ${e.port}`;
+      const legs = scene.byArc.get(a._arcKey) || [];
+      blocks.push(`<div><h3>Object arc</h3><dl>
+        <dt>from</dt><dd>${esc(fmt(f))}</dd><dt>to</dt><dd>${esc(fmt(t))}</dd>
+        <dt>legs</dt><dd>${legs.length}</dd></dl>
+        <div class="note" style="margin-top:8px">Every leg of a multi-hop move carries this same logical arc.</div></div>`);
+    }
+  } else {
+    const find = (n) => n.key === s.key ? n : n.children.reduce((r, c) => r || find(c), null);
+    const n = find(scene.tree);
+    if (n) {
+      blocks.push(`<div><h3>${esc(n.kind)} node</h3><div class="lead">${esc(n.key || n.id)}</div>
+        <div class="note" style="margin-top:7px">process <span class="mono">${esc(n.proc)}</span></div></div>`);
+      const acts = [...(litActs() || [])].map((i) => scene.acts[i]);
+      const procs = acts.filter((a) => a.kind === "processing");
+      const span = acts.length ? [Math.min(...acts.map((a) => a.start)), Math.max(...acts.map((a) => a.end))] : null;
+      blocks.push(`<div><h3>In the plan</h3><dl>
+        <dt>atomic steps</dt><dd>${n.atomicCount}</dd>
+        <dt>processing</dt><dd>${procs.length}</dd>
+        <dt>transports</dt><dd>${acts.length - procs.length}</dd>
+        ${span ? `<dt>window</dt><dd>${span[0]} – ${span[1]} ${esc(unitAbbr(scene.unit))}</dd>` : ""}
+        </dl></div>`);
+      if (n.inputs.length || n.outputs.length) {
+        blocks.push(`<div><h3>Ports</h3><dl>
+          ${n.inputs.map((p) => `<dt>in</dt><dd>${esc(p)}</dd>`).join("")}
+          ${n.outputs.map((p) => `<dt>out</dt><dd>${esc(p)}</dd>`).join("")}</dl></div>`);
+      }
+    }
+  }
+  el.innerHTML = blocks.join("");
+}
+
+function renderMeta() {
+  $("roOutcome").textContent = scene.plan.outcome || "—";
+  $("roMake").textContent = `${scene.makespan} ${unitAbbr(scene.unit)}`;
+  $("roActs").textContent = scene.acts.length;
+  $("stSrc").textContent = `${scene.source.workflow}  ·  ${scene.source.env}  ·  ${scene.source.plan}`;
+  const s = state.sel;
+  $("stSel").textContent = !s ? "Nothing selected — click a bar or a workflow box"
+    : s.kind === "act" ? `Selected activity #${s.i} · ${shortLabel(scene.acts[s.i])}`
+    : `Selected node · ${s.key || scene.wf.entry}`;
+}
+
+function render() { renderGraph(); renderGantt(); renderInspector(); renderMeta(); }
+
+/* ══ interaction ════════════════════════════════════════════════════════ */
+function setDataset(k) {
+  state.ds = k;
+  state.expanded = new Set();
+  state.sel = null;
+  state.gz = 1; state.tz = 1;
+  scene = buildScene(k);
+  render();
+  fitGraph();
+}
+
+function select(sel) {
+  const same = JSON.stringify(state.sel) === JSON.stringify(sel);
+  state.sel = same ? null : sel;
+  render();
+}
+
+function allComposites(n, out) {
+  if (n.kind === "composite" && n.key !== "") out.push(n.key);
+  n.children.forEach((c) => allComposites(c, out));
+  return out;
+}
+
+function fitGraph() {
+  layout(scene.tree);
+  const box = $("graphScroll");
+  const availW = box.clientWidth - 34, availH = box.clientHeight - 34;
+  state.gz = Math.max(0.3, Math.min(1.6, Math.min(availW / (scene.tree.w + 4), availH / (scene.tree.h + 4))));
+  renderGraph();
+}
+
+/* tooltip */
+const tip = $("tip");
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 12;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 12;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+function actTip(a) {
+  const rows = [];
+  rows.push(`${a.start} – ${a.end} ${unitAbbr(scene.unit)}  (${a.end - a.start})`);
+  if (a.kind === "processing") rows.push(`${a.process} · mode ${a.mode} · ${(a.devices || []).join(", ")}`);
+  if (a.kind === "transport") rows.push(`${a.from_spot} → ${a.to_spot}${a.transporter ? " · " + a.transporter : ""}`);
+  if (a.kind === "relay") rows.push(`waiting at ${a.spot}`);
+  if (a.status !== "pending") rows.push(`status: ${a.status}`);
+  return `<div class="tt">${esc(shortLabel(a))}</div><div class="tl">${rows.map(esc).join("<br>")}</div>`;
+}
+
+/* graph events */
+$("graphSvg").addEventListener("click", (e) => {
+  const g = e.target.closest(".gnode");
+  if (!g) { select(null); return; }
+  const key = g.dataset.key;
+  const find = (n) => n.key === key ? n : n.children.reduce((r, c) => r || find(c), null);
+  const n = find(scene.tree);
+  if (n && n.kind === "composite" && n.key !== "") {
+    // clicking the badge / collapse caption toggles; elsewhere selects
+    const t = e.target;
+    if (t.classList.contains("badge") || t.classList.contains("btext") || t.classList.contains("chev")) {
+      if (state.expanded.has(key)) state.expanded.delete(key); else state.expanded.add(key);
+      render(); return;
+    }
+  }
+  select({ kind: "node", key });
+});
+$("graphSvg").addEventListener("dblclick", (e) => {
+  const g = e.target.closest(".gnode");
+  if (!g) return;
+  const key = g.dataset.key;
+  if (!key) return;
+  if (state.expanded.has(key)) state.expanded.delete(key); else state.expanded.add(key);
+  render();
+});
+$("graphSvg").addEventListener("mousemove", (e) => {
+  const g = e.target.closest(".gnode");
+  if (!g) return hideTip();
+  const key = g.dataset.key;
+  const find = (n) => n.key === key ? n : n.children.reduce((r, c) => r || find(c), null);
+  const n = find(scene.tree);
+  if (!n) return hideTip();
+  const extra = n.kind === "composite" ? `${n.atomicCount} atomic steps · ${n.open ? "expanded" : "double-click to expand"}` : `process ${n.proc}`;
+  showTip(`<div class="tt">${esc(n.key || n.id)}</div><div class="tl">${esc(extra)}</div>`, e);
+});
+$("graphSvg").addEventListener("mouseleave", hideTip);
+
+/* gantt events */
+function bindActClicks(root) {
+  root.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-act]");
+    if (!t) { select(null); return; }
+    select({ kind: "act", i: +t.dataset.act });
+  });
+  root.addEventListener("mousemove", (e) => {
+    const t = e.target.closest("[data-act]");
+    if (!t) return hideTip();
+    showTip(actTip(scene.acts[+t.dataset.act]), e);
+  });
+  root.addEventListener("mouseleave", hideTip);
+}
+bindActClicks($("plotSvg"));
+bindActClicks($("tableWrap"));
+
+$("plotScroll").addEventListener("scroll", () => { $("axisScroll").scrollLeft = $("plotScroll").scrollLeft; });
+
+/* controls */
+$("dsSel").addEventListener("change", (e) => setDataset(e.target.value));
+$("themeSel").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (v === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", v);
+});
+document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+  state.view = b.dataset.view;
+  document.querySelectorAll("[data-view]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  $("legend").style.visibility = state.view === "table" ? "hidden" : "visible";
+  renderGantt();
+}));
+$("expandAll").addEventListener("click", () => { state.expanded = new Set(allComposites(scene.tree, [])); render(); fitGraph(); });
+$("collapseAll").addEventListener("click", () => { state.expanded = new Set(); render(); fitGraph(); });
+$("gzIn").addEventListener("click", () => { state.gz = Math.min(2.4, state.gz * 1.25); renderGraph(); });
+$("gzOut").addEventListener("click", () => { state.gz = Math.max(0.25, state.gz / 1.25); renderGraph(); });
+$("gzFit").addEventListener("click", fitGraph);
+$("tzIn").addEventListener("click", () => { state.tz = Math.min(12, state.tz * 1.4); renderGantt(); });
+$("tzOut").addEventListener("click", () => { state.tz = Math.max(1, state.tz / 1.4); renderGantt(); });
+$("tzFit").addEventListener("click", () => { state.tz = 1; renderGantt(); });
+
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") select(null); });
+
+/* splitter */
+(() => {
+  const sp = $("splitter"), stack = $("stack");
+  let dragging = false;
+  const apply = () => {
+    stack.style.setProperty("--r1", state.split + "fr");
+    stack.style.setProperty("--r2", (100 - state.split) + "fr");
+  };
+  sp.addEventListener("pointerdown", (e) => { dragging = true; sp.setPointerCapture(e.pointerId); });
+  sp.addEventListener("pointerup", (e) => { dragging = false; sp.releasePointerCapture(e.pointerId); renderGantt(); });
+  sp.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const r = stack.getBoundingClientRect();
+    const pct = ((e.clientY - r.top) / r.height) * 100;
+    state.split = Math.max(14, Math.min(82, pct));
+    apply();
+  });
+  sp.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") { state.split = Math.max(14, state.split - 4); apply(); renderGantt(); }
+    if (e.key === "ArrowDown") { state.split = Math.min(82, state.split + 4); apply(); renderGantt(); }
+  });
+  apply();
+})();
+
+/* resize */
+let rt = null;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => renderGantt(), 120); });
+
+/* boot */
+$("dsSel").innerHTML = DB.order.map((k) => `<option value="${esc(k)}"${k === state.ds ? " selected" : ""}>${esc(DB.sets[k].label)}</option>`).join("");
+setDataset(state.ds);
+requestAnimationFrame(() => { fitGraph(); renderGantt(); });
+</script>

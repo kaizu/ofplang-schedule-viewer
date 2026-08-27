@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The example documents the golden test reads live in the pinned
+          # submodule (design.md D20).
+          submodules: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      - run: npm run typecheck
+        working-directory: web
+
+      - run: npm test
+        working-directory: web
+
+      - run: npm run build
+        working-directory: web

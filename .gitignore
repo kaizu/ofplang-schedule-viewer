@@ -1,0 +1,15 @@
+# Working notes — not published (same convention as the sibling ofplang repos).
+/dev-notes/
+
+# Node / Vite
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Datasets are generated from external/ at build time (design.md D9 ①).
+/web/public/datasets/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.local
