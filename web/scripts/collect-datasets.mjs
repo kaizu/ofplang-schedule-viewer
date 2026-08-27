@@ -9,7 +9,7 @@
  * Node only: no Python, no ortools, nothing the CI does not already have (D7).
  */
 
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,7 @@ import { parse } from "yaml";
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 
+const SUBMODULE_ROOT = here("../../external/ofplang-schedule");
 const SUBMODULE = here("../../external/ofplang-schedule/examples");
 const CURATED = here("../../datasets/curated");
 const OUT = here("../public/datasets");
@@ -41,8 +42,14 @@ function readYaml(path) {
   return parse(readFileSync(path, "utf8"));
 }
 
-/** Every `<name>.plan.yaml` / `<name>.replan.yaml`, with whatever sits beside it. */
-function collectFrom(dir, origin) {
+/** Every `<name>.plan.yaml` / `<name>.replan.yaml`, with whatever sits beside it.
+ *
+ * `roots` are the directories a plan's own `meta` paths are relative to. Those
+ * paths are the authority: a replan usually reuses another example's workflow
+ * — every `reroute*.replan.yaml` runs on `simple.workflow.yaml` — and matching
+ * by filename silently loses it, leaving the graph pane empty (§6.1 `meta`).
+ */
+function collectFrom(dir, origin, roots) {
   if (!safeList(dir).length) return [];
   const outputs = join(dir, "outputs");
   const search = [dir, ...(safeList(outputs).length ? [outputs] : [])];
@@ -67,10 +74,19 @@ function collectFrom(dir, origin) {
     const name = file.replace(/\.(re)?plan\.yaml$/, "");
     const id = replan ? `${name}_replan` : name;
 
-    const workflowPath = find(`${name}.workflow.yaml`);
-    const envPath = find(`${name}.env.yaml`);
-
     const plan = readYaml(planPath);
+
+    const fromMeta = (rel) => {
+      if (typeof rel !== "string" || !rel) return undefined;
+      for (const root of roots) {
+        const candidate = join(root, rel);
+        if (existsSync(candidate)) return candidate;
+      }
+      return undefined;
+    };
+
+    const workflowPath = fromMeta(plan.meta?.workflow) ?? find(`${name}.workflow.yaml`);
+    const envPath = fromMeta(plan.meta?.environment) ?? find(`${name}.env.yaml`);
     const dataset = {
       id,
       label: prettify(name) + (replan ? " (replan)" : ""),
@@ -102,8 +118,8 @@ const safeList = (dir) => {
 const relative = (p) => p.replace(/\\/g, "/").replace(/^.*\/(examples|curated)\//, "$1/");
 
 const datasets = [
-  ...collectFrom(SUBMODULE, "ofplang-schedule (pinned submodule)"),
-  ...collectFrom(CURATED, "curated in this repository"),
+  ...collectFrom(SUBMODULE, "ofplang-schedule (pinned submodule)", [SUBMODULE_ROOT]),
+  ...collectFrom(CURATED, "curated in this repository", [CURATED, SUBMODULE_ROOT]),
 ].sort((a, b) => (a.plan.activities?.length ?? 0) - (b.plan.activities?.length ?? 0));
 
 rmSync(OUT, { recursive: true, force: true });

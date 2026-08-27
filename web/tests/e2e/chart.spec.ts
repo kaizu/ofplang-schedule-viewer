@@ -316,3 +316,29 @@ test.describe("what a selected move traces", () => {
     expect(total).toBeGreaterThan(3);
   });
 });
+
+test.describe("provenance", () => {
+  test("every bundled plan finds the workflow it was scheduled from", async ({ page }) => {
+    // A replan usually reuses another example's workflow — the reroute family
+    // all run on simple.workflow.yaml — so the pairing comes from the plan's
+    // own `meta`, not from matching filenames (§6.1).
+    await page.goto("/");
+    const ids = await page.locator("#dataset option").evaluateAll((o) =>
+      o.map((x) => (x as HTMLOptionElement).value),
+    );
+    expect(ids.length).toBeGreaterThanOrEqual(8);
+
+    for (const id of ids) {
+      await page.locator("#dataset").selectOption(id);
+      await expect.poll(() => new URL(page.url()).searchParams.get("doc")).toBe(id);
+      await expect(page.locator("#graph g.gnode"), id).not.toHaveCount(0);
+      await expect(page.locator("#graph-hint"), id).toContainText("atomic steps");
+    }
+  });
+
+  test("a replan names the workflow it borrowed", async ({ page }) => {
+    await open(page, "reroute_chain_replan");
+    await expect(page.locator("#status-source")).toContainText("simple.workflow.yaml");
+    await expect(page.locator("#status-source")).toContainText("reroute_chain.replan.yaml");
+  });
+});
