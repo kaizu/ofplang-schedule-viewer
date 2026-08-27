@@ -26,6 +26,32 @@ export interface Machine {
   readonly occupancy: number;
 }
 
+/**
+ * A consumable stock, replayed across the run.
+ *
+ * §4.7.2: `inventories` states the level at the *start*, and every later level
+ * follows from the history. That replay is the only way to answer the question
+ * a plan with refills in it raises — why this many, and why here.
+ */
+export interface ResourceTrace {
+  /** `<device>.<resource>` (§8.2). */
+  readonly ref: string;
+  readonly capacity: number | undefined;
+  readonly start: number;
+  /**
+   * The lowest level reached *after* something happened to the stock.
+   *
+   * Not counting the starting level: a stock that begins empty is empty at
+   * time zero by definition, and saying so tells nobody anything. What is
+   * worth knowing is how close the run came to running dry once it was under
+   * way.
+   */
+  readonly low: number;
+  readonly end: number;
+  readonly refills: number;
+  readonly consumed: number;
+}
+
 export interface Metrics {
   readonly makespan: number;
   readonly horizon: number;
@@ -49,6 +75,7 @@ export interface Scene {
   readonly byMachine: ReadonlyMap<string, readonly number[]>;
 
   readonly machines: readonly Machine[];
+  readonly resources: readonly ResourceTrace[];
   readonly metrics: Metrics;
 }
 
@@ -113,6 +140,7 @@ export function buildScene(
     });
 
   const machines = collectMachines(env, spans, horizon);
+  const resources = replayResources(doc, env);
 
   const counts: Record<Activity["kind"], number> = {
     processing: 0,
@@ -132,6 +160,7 @@ export function buildScene(
     byArc,
     byMachine,
     machines,
+    resources,
     metrics: {
       makespan,
       horizon,
@@ -170,6 +199,61 @@ function collectMachines(
   for (const id of spans.keys()) add(id, "device");
 
   return out;
+}
+
+/**
+ * Replay every stock from its starting level through the run.
+ *
+ * A refill is credited when it finishes — stock that is still being poured is
+ * not yet usable — and a step's consumption is debited when it starts.
+ */
+function replayResources(doc: ExecutionDocument, env: Environment | undefined): ResourceTrace[] {
+  const start = new Map<string, number>();
+  for (const [device, byResource] of Object.entries(doc.inventories?.levels ?? {}))
+    for (const [resource, level] of Object.entries(byResource)) start.set(`${device}.${resource}`, level);
+
+  // A resource the environment declares but the document does not name starts
+  // at zero (§6.10), and is worth showing: an empty stock is a fact.
+  for (const device of env?.devices ?? [])
+    for (const resource of Object.keys(device.resources ?? {}))
+      if (!start.has(`${device.id}.${resource}`)) start.set(`${device.id}.${resource}`, 0);
+
+  const events = new Map<string, { at: number; delta: number }[]>();
+  const add = (ref: string, at: number, delta: number): void => {
+    if (!start.has(ref)) start.set(ref, 0);
+    const list = events.get(ref);
+    if (list) list.push({ at, delta });
+    else events.set(ref, [{ at, delta }]);
+  };
+  for (const a of doc.activities) {
+    if (a.kind === "processing")
+      for (const [ref, amount] of Object.entries(a.consumption ?? {})) add(ref, a.start, -amount);
+    else if (a.kind === "replenishment")
+      for (const [resource, amount] of Object.entries(a.amounts)) add(`${a.device}.${resource}`, a.end, amount);
+  }
+  if (start.size === 0) return [];
+
+  const capacity = new Map<string, number>();
+  for (const device of env?.devices ?? [])
+    for (const [resource, def] of Object.entries(device.resources ?? {}))
+      capacity.set(`${device.id}.${resource}`, def.capacity);
+
+  const out: ResourceTrace[] = [];
+  for (const [ref, initial] of start) {
+    const timeline = [...(events.get(ref) ?? [])].sort((x, y) => x.at - y.at);
+    let level = initial;
+    let low = timeline.length ? Number.POSITIVE_INFINITY : initial;
+    let refills = 0;
+    let consumed = 0;
+    for (const e of timeline) {
+      level += e.delta;
+      if (e.delta > 0) refills += 1;
+      else consumed -= e.delta;
+      low = Math.min(low, level);
+    }
+    out.push({ ref, capacity: capacity.get(ref), start: initial, low, end: level, refills, consumed });
+  }
+  return out.sort((a, b) => a.ref.localeCompare(b.ref));
 }
 
 /** Total time covered by a set of possibly overlapping intervals. */

@@ -44,6 +44,9 @@ const esc = (s: string): string =>
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** One decimal is plenty for SVG coordinates, and keeps the markup readable. */
+const r = (n: number): number => Math.round(n * 10) / 10;
+
 /** IBM Plex Mono at 9.5px runs about 5.7px to the character. */
 const CH = 5.7;
 
@@ -144,11 +147,24 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
       `<rect class="${cls}" data-i="${bar.index}" x="${x0 + 1}" y="${held ? y + BAR_H - HELD_H : y}" width="${w}" height="${h}"/>`,
     );
 
+    if (bar.style === "replenishment") {
+      // The mandatory non-colour cue: a refill separates from a move by a
+      // colour distance the palette check only warns on, so it also carries a
+      // shape, drawn whether or not the caption fits.
+      const cy = y + BAR_H / 2;
+      const cx = x0 + 1 + Math.min(w, 12) / 2;
+      const a = Math.min(3, w / 3);
+      plot.push(
+        `<path class="refill-plus" d="M ${r(cx - a)} ${r(cy)} H ${r(cx + a)} M ${r(cx)} ${r(cy - a)} V ${r(cy + a)}"/>`,
+      );
+    }
+
     if (!opts.showLabels || !bar.label || held) continue;
     const baseline = y + BAR_H - 3.5;
-    const inside = fit(bar.label, w - 9);
+    const indent = bar.style === "replenishment" ? 15 : 5;
+    const inside = fit(bar.label, w - indent - 4);
     if (inside)
-      plot.push(`<text class="bar-tx" x="${x0 + 5}" y="${baseline}">${esc(inside)}</text>`);
+      plot.push(`<text class="bar-tx" x="${x0 + indent}" y="${baseline}">${esc(inside)}</text>`);
     else {
       const gap = nextStartOn(bar.lane, x0) - x1 - 9;
       const outside = fit(bar.label, gap);

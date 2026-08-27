@@ -89,12 +89,30 @@ function overview(scene: Scene, blurb: string): string {
       out.push(block("Boundary", dl(rows) + `<div class="note" style="margin-top:8px">Where the workflow's own material starts and ends up.</div>`));
   }
 
-  if (doc.inventories) {
-    const rows = Object.entries(doc.inventories.levels).flatMap(([dev, byRes]) =>
-      Object.entries(byRes).map(([r, n]) => [`${dev}.${r}`, n] as const),
+  if (scene.resources.length) {
+    // The question a plan with refills raises is why this many and why here.
+    // Where it got to at its lowest is the answer: a stock that reaches zero
+    // was the constraint, one that never drops far was not.
+    const rows = scene.resources
+      .map((r) => {
+        const cap = r.capacity === undefined ? "" : ` / ${r.capacity}`;
+        const drained = r.low === 0 ? ' <span class="warn">ran dry</span>' : "";
+        return (
+          `<div class="ubar res"><span class="t" title="${esc(r.ref)}">${esc(r.ref)}</span>` +
+          `<span class="p num">${r.start} → ${r.low}${drained} → ${r.end}${cap}</span></div>`
+        );
+      })
+      .join("");
+    const refills = scene.resources.reduce((n, r) => n + r.refills, 0);
+    out.push(
+      block(
+        "Stock",
+        `<div class="util">${rows}</div>` +
+          `<div class="note" style="margin-top:8px">Level at the start, at its lowest once the run was ` +
+          `under way, and at the end, replayed from the ` +
+          `starting stock through ${refills === 1 ? "one refill" : `${refills} refills`} and what each step used.</div>`,
+      ),
     );
-    if (rows.length)
-      out.push(block("Starting stock", dl(rows) + `<div class="note" style="margin-top:8px">Levels at the start of the run; later levels follow from the refills.</div>`));
   }
 
   return out.join("");

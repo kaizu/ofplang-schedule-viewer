@@ -29,7 +29,7 @@ const BLURBS = {
   reformatter: "Eight plate operations that fan out and merge back.",
   plate_batch: "Three levels of nesting — two branches of two repeat units.",
   interface_load: "Boundary material: the workflow's entry input is pinned to a spot.",
-  consumable: "A device-local reagent, and the refill the scheduler schedules for it.",
+  consumable: "A reagent the reader starts without, and the single refill that covers both assays.",
   reroute: "The planned transporter is gone, so the rest of the move is replanned around it.",
   reroute_chain: "A move that takes two hops, with the plate waiting at a relay in between.",
   reroute_stay: "A re-route where the plate stays put, so the relay folds out of the plan.",

@@ -310,6 +310,7 @@ function renderAll(): void {
           : "";
 
   renderBanner();
+  renderLegend();
   renderGraphPane();
   renderChart();
 }
@@ -362,6 +363,29 @@ function fitGraph(attempt = 0): void {
   const scale = Math.min((box.clientWidth - 36) / g.width, (box.clientHeight - 36) / g.height);
   state.graphZoom = Math.max(0.3, Math.min(1.5, scale));
   renderGraphPane();
+}
+
+/** Only the marks this plan actually uses — a legend for things that are not
+ *  on screen is noise, and it hides the one that is. */
+function renderLegend(): void {
+  const scene = state.scene;
+  if (!scene) {
+    el("legend").innerHTML = "";
+    return;
+  }
+  const counts = scene.metrics.counts;
+  const held = scene.activities.some((a) => a.kind === "transport" && a.transporter);
+  const items: [boolean, string, string][] = [
+    [counts.processing > 0, "processing", "processing"],
+    [counts.transport > 0, "transport", "transport"],
+    [held, "held", "device held"],
+    [counts.relay > 0, "relay", "relay"],
+    [counts.replenishment > 0, "replenishment", "refill"],
+  ];
+  el("legend").innerHTML = items
+    .filter(([on]) => on)
+    .map(([, cls, label]) => `<span class="lg"><i class="sw ${cls}"></i>${label}</span>`)
+    .join("");
 }
 
 function renderChart(): void {

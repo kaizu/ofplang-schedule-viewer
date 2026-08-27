@@ -410,3 +410,40 @@ test.describe("a workflow on its own", () => {
     await expect(page.locator("#plan-empty")).toBeVisible();
   });
 });
+
+test.describe("a plan with a refill", () => {
+  test("marks it apart from a move, by hue and by shape", async ({ page }) => {
+    await open(page, "consumable");
+
+    // Its own colour, and the plus that carries the distinction where colour
+    // alone is not enough (the two hues sit in the palette check's warn band).
+    await expect(page.locator("#plot rect.bar.replenishment")).toHaveCount(2);
+    await expect(page.locator("#plot path.refill-plus")).toHaveCount(2);
+
+    // A refill holds the device and the replenisher, so it appears on both.
+    const lanes = await page.locator("#gutter text.lane-label").allTextContents();
+    expect(lanes).toContain("reader");
+    expect(lanes).toContain("dispenser");
+  });
+
+  test("says so in the legend, and only when there is one", async ({ page }) => {
+    await open(page, "consumable");
+    await expect(page.locator("#legend")).toContainText("refill");
+    // This plan has no relay, so the legend does not offer one.
+    await expect(page.locator("#legend")).not.toContainText("relay");
+
+    await page.locator("#dataset").selectOption("plate_batch");
+    await expect(page.locator("#legend")).not.toContainText("refill");
+  });
+
+  test("explains the stock the refill exists for", async ({ page }) => {
+    await open(page, "consumable");
+    await expect(page.locator("#inspector")).toContainText("replenishment_count = 1");
+    await expect(page.locator("#inspector")).toContainText("Stock");
+    await expect(page.locator("#inspector")).toContainText("reader.reagent");
+
+    await page.locator("#plot rect.bar.replenishment").first().click();
+    await expect(page.locator("#inspector")).toContainText("dispenser");
+    await expect(page.locator("#inspector")).toContainText("reagent");
+  });
+});

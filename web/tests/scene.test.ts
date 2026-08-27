@@ -124,3 +124,47 @@ describe("every plan in the corpus", () => {
       }
     });
 });
+
+describe("consumable stock", () => {
+  const scene = sceneOf("consumable");
+
+  it("replays every level from the start of the run (§4.7.2)", () => {
+    const reagent = scene.resources.find((r) => r.ref === "reader.reagent");
+    expect(reagent, scene.resources.map((r) => r.ref).join(", ")).toBeDefined();
+
+    // The reader starts empty, so nothing that needs reagent can run until the
+    // dispenser has been; one refill to capacity covers both assays.
+    expect(reagent!.start).toBe(0);
+    expect(reagent!.refills).toBe(1);
+    expect(reagent!.consumed).toBeGreaterThan(0);
+    // Not zero: the reader is empty only before the refill, and "empty at the
+    // start" is the premise rather than something the plan risked.
+    expect(reagent!.low).toBe(6 - reagent!.consumed);
+    expect(reagent!.low).toBeGreaterThan(0);
+    expect(reagent!.end).toBe(reagent!.start + 6 - reagent!.consumed);
+    if (reagent!.capacity !== undefined) expect(reagent!.end).toBeLessThanOrEqual(reagent!.capacity);
+  });
+
+  it("counts the refill as work that holds two machines (§4.7.1)", () => {
+    const refill = scene.activities.findIndex((a) => a.kind === "replenishment");
+    expect(refill).toBeGreaterThanOrEqual(0);
+    const holders = [...scene.byMachine.entries()]
+      .filter(([, list]) => list.includes(refill))
+      .map(([id]) => id);
+    expect(holders).toContain("reader");
+    expect(holders).toContain("dispenser");
+  });
+
+  it("reports the objective the plan was solved for, list and all (§6.1)", () => {
+    expect(scene.doc.objective?.kind).toEqual(["makespan", "replenishment_count"]);
+    expect(scene.doc.objective?.value).toEqual([33, 1]);
+    // The makespan readout takes the first stage, not the refill count.
+    expect(scene.metrics.makespan).toBe(33);
+  });
+});
+
+describe("a plan with no consumables", () => {
+  it("has nothing to replay", () => {
+    expect(sceneOf("plate_batch").resources).toEqual([]);
+  });
+});
