@@ -302,8 +302,17 @@ main {
   overflow: hidden;
   flex: 1 1 auto;
 }
+/* One scroll container for both axes.
+   The gutter must not stretch to the visible height and clip the plot with it,
+   which is what happens as soon as the plot gets its own `overflow-y`: a flex
+   item with an auto cross size stretches to the *container's* height, not to
+   its content's, so a 40-lane chart lost every bar below the fold while the
+   gutter — an <svg> with an explicit height — still listed all the labels.
+   Sizing both items to their content and scrolling the row instead also makes
+   the gutter's `position: sticky` do what it was always meant to. */
 .body-row {
   display: flex;
+  align-items: flex-start;
   overflow: auto;
   min-height: 0;
 }
@@ -315,10 +324,8 @@ main {
   background: var(--panel);
   border-right: 1px solid var(--hairline);
 }
-.plot-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex: 1 1 auto;
+.plot-wrap {
+  flex: 0 0 auto;
 }
 
 svg {

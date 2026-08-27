@@ -23,7 +23,7 @@ import {
   type GateReport,
 } from "./read";
 import { downloadSvg, ganttToSvg } from "./view/export";
-import { renderGantt, type GanttGeometry } from "./view/gantt";
+import { GUTTER_W, renderGantt, type GanttGeometry } from "./view/gantt";
 import { renderInspector, statusLine, tooltipFor } from "./view/inspector";
 import { formatDuration } from "./layout/scale";
 
@@ -147,8 +147,9 @@ function renderChart(): void {
   const scene = state.scene;
   if (!scene) return;
 
-  const plotScroll = el("plot-scroll");
-  const base = Math.max(360, plotScroll.clientWidth - 18);
+  // The gutter is inside the scrolling row, so the plot's own width is what is
+  // left of it.
+  const base = Math.max(360, el("body-row").clientWidth - GUTTER_W - 18);
   const lit = new Set<number>();
   if (state.selected !== undefined) for (const i of sameArc(scene, state.selected)) lit.add(i);
 
@@ -162,7 +163,7 @@ function renderChart(): void {
   state.geometry = g;
 
   const gutter = el<SVGSVGElement & HTMLElement>("gutter");
-  gutter.setAttribute("width", "176");
+  gutter.setAttribute("width", String(GUTTER_W));
   gutter.setAttribute("height", String(g.height));
   gutter.innerHTML = g.gutter;
 
@@ -259,9 +260,9 @@ function wireControls(): void {
     downloadSvg(svg, `${name}.${state.view}.svg`);
   });
 
-  // The axis scrolls with the plot, and only with it.
-  el("plot-scroll").addEventListener("scroll", () => {
-    el("axis-scroll").scrollLeft = el("plot-scroll").scrollLeft;
+  // The axis follows the one scroll container horizontally.
+  el("body-row").addEventListener("scroll", () => {
+    el("axis-scroll").scrollLeft = el("body-row").scrollLeft;
   });
 
   document.addEventListener("keydown", (e) => {
