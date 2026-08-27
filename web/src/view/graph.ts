@@ -17,6 +17,26 @@ export interface GraphOptions {
   readonly lit: ReadonlySet<string>;
   /** Boxes on the way to a lit one — outlined, not filled. */
   readonly onPath: ReadonlySet<string>;
+  /**
+   * The one connection a selected move serves.
+   *
+   * A move carries exactly one Object between two ports, so exactly one edge
+   * should trace. Lighting everything that touches the two boxes — which is
+   * what "either end is lit" does — says the move is related to five
+   * connections when it serves one.
+   *
+   * The ports are matched only when the box on that side really exposes them:
+   * an arc into a *closed* composite names a port of the atomic step inside
+   * it, which the composite's own border does not have.
+   */
+  readonly arc?: {
+    readonly fromKey: string;
+    readonly fromPort: string;
+    readonly toKey: string;
+    readonly toPort: string;
+  };
+  /** A selected box traces the dataflow *inside* it, when it is open. */
+  readonly subtree?: string;
 }
 
 export interface GraphRender {
@@ -46,12 +66,31 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
       .filter(Boolean)
       .join(" ");
 
+  const all = [...layout.shells, ...layout.leaves];
   const shells = layout.shells.map((n) => shell(n, classesFor(n))).join("");
   const leaves = layout.leaves.map((n) => leaf(n, classesFor(n))).join("");
 
+  const under = (key: string, root: string): boolean =>
+    root === "" || key === root || key.startsWith(`${root}.`);
+
+  const traced = (e: (typeof layout.edges)[number]): boolean => {
+    if (opts.arc) {
+      if (e.fromKey !== opts.arc.fromKey || e.toKey !== opts.arc.toKey) return false;
+      const source = all.find((n) => n.key === e.fromKey);
+      const target = all.find((n) => n.key === e.toKey);
+      const portsKnown =
+        source?.outputs.some((a) => a.port === opts.arc!.fromPort) === true &&
+        target?.inputs.some((a) => a.port === opts.arc!.toPort) === true;
+      return !portsKnown || (e.fromPort === opts.arc.fromPort && e.toPort === opts.arc.toPort);
+    }
+    if (opts.subtree !== undefined)
+      return under(e.fromKey, opts.subtree) && under(e.toKey, opts.subtree);
+    return false;
+  };
+
   const edges = layout.edges
     .map((e) => {
-      const on = opts.lit.has(e.fromKey) || opts.lit.has(e.toKey);
+      const on = traced(e);
       const cls = ["edge", e.object ? "" : "data", on ? "lit" : "", active && !on ? "dim" : ""]
         .filter(Boolean)
         .join(" ");

@@ -281,3 +281,38 @@ test.describe("a share link", () => {
     await expect(page.locator("#status-source")).toContainText("shared link");
   });
 });
+
+test.describe("what a selected move traces", () => {
+  test("is the one connection it serves, not everything touching its ends", async ({ page }) => {
+    await open(page, "reformatter");
+    // motoman_out_a4 → a4_in_motoman. Both boxes carry four other connections
+    // between them, and none of those are what this move carries.
+    await page.locator("#plot rect.bar.transport").nth(3).click();
+
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(2);
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(1);
+    await expect(page.locator("#inspector")).toContainText("motoman_out_a4");
+  });
+
+  test("is nothing, when the move happens inside a box that is shut", async ({ page }) => {
+    await open(page, "plate_batch");
+    // A move between two steps of the same repeat unit: with the branch shut
+    // there is no edge on screen for it, and the branch alone carries it.
+    const inside = page.locator("#plot rect.bar.transport").nth(1);
+    await inside.click();
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(1);
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(0);
+  });
+
+  test("a selected box traces the dataflow inside it", async ({ page }) => {
+    await open(page, "plate_batch");
+    await page.locator('#graph [data-key="b2"] .btext').click();
+    await page.locator('#graph [data-key="b2"] rect.box').click();
+
+    // Three edges are drawn inside b2's own border: its input port into rep1,
+    // rep1 into rep2, and rep2 back out to its output port. Nothing outside is.
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(3);
+    const total = await page.locator("#graph path.edge").count();
+    expect(total).toBeGreaterThan(3);
+  });
+});

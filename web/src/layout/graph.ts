@@ -48,7 +48,9 @@ export interface LaidEdge {
   readonly to: { x: number; y: number };
   readonly object: boolean;
   readonly fromKey: string;
+  readonly fromPort: string;
   readonly toKey: string;
+  readonly toPort: string;
 }
 
 export interface GraphLayout {
@@ -127,7 +129,9 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
           to: { x: to.x, y: to.y },
           object: binding.object,
           fromKey,
+          fromPort: from.port,
           toKey: p.sized.node.key,
+          toPort: port,
         });
       }
     }
@@ -146,7 +150,9 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
         to: { x: to.x, y: to.y },
         object: true,
         fromKey: src.sized.node.key,
+        fromPort: from.port,
         toKey: laid.key,
+        toPort: port,
       });
     }
 

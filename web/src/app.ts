@@ -109,7 +109,16 @@ function litActivities(): Set<number> {
   return out;
 }
 
-function litNodes(): { lit: Set<string>; onPath: Set<string> } {
+interface Highlight {
+  readonly lit: Set<string>;
+  readonly onPath: Set<string>;
+  /** The single connection a selected move serves, if that is the selection. */
+  readonly arc?: { fromKey: string; fromPort: string; toKey: string; toPort: string };
+  /** The box whose internal dataflow to trace, if that is the selection. */
+  readonly subtree?: string;
+}
+
+function litNodes(): Highlight {
   const lit = new Set<string>();
   const onPath = new Set<string>();
   const graph = state.graph;
@@ -120,7 +129,9 @@ function litNodes(): { lit: Set<string>; onPath: Set<string> } {
   if (sel.kind === "node") {
     lit.add(sel.key);
     for (const k of ancestorKeys(sel.key === "" ? [] : sel.key.split("."))) onPath.add(k);
-  } else if (scene) {
+    return { lit, onPath, subtree: sel.key };
+  }
+  if (scene) {
     const activity = scene.activities[sel.index];
     if (activity) {
       const paths =
@@ -133,6 +144,26 @@ function litNodes(): { lit: Set<string>; onPath: Set<string> } {
         const key = visibleFor(graph, path, state.expanded);
         if (key !== undefined) lit.add(key);
         for (const k of ancestorKeys(path)) onPath.add(k);
+      }
+
+      // A move serves one connection. Name it, so one edge traces rather than
+      // everything that happens to touch either end.
+      if (activity.kind === "transport" || activity.kind === "relay") {
+        const fromKey = visibleFor(graph, activity.arc.from.node, state.expanded);
+        const toKey = visibleFor(graph, activity.arc.to.node, state.expanded);
+        if (fromKey !== undefined && toKey !== undefined) {
+          for (const k of lit) onPath.delete(k);
+          return {
+            lit,
+            onPath,
+            arc: {
+              fromKey,
+              fromPort: activity.arc.from.port,
+              toKey,
+              toPort: activity.arc.to.port,
+            },
+          };
+        }
       }
     }
   }
@@ -274,8 +305,14 @@ function renderGraphPane(): void {
     return;
   }
 
-  const { lit, onPath } = litNodes();
-  const g = renderGraph(graph, { expanded: state.expanded, lit, onPath });
+  const { lit, onPath, arc, subtree } = litNodes();
+  const g = renderGraph(graph, {
+    expanded: state.expanded,
+    lit,
+    onPath,
+    ...(arc ? { arc } : {}),
+    ...(subtree !== undefined ? { subtree } : {}),
+  });
   host.setAttribute("viewBox", `-2 -2 ${g.width} ${g.height}`);
   host.setAttribute("width", String(Math.round(g.width * state.graphZoom)));
   host.setAttribute("height", String(Math.round(g.height * state.graphZoom)));
