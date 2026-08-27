@@ -1,8 +1,11 @@
-# ofplang-web
+# ofplang-schedule-viewer
 
-A static web viewer for [ofplang](https://github.com/ofplang/spec) workflows and
-the execution plans produced by
-[`ofp-schedule`](https://github.com/ofplang/schedule).
+A static web viewer for the execution plans produced by
+[`ofp-schedule`](https://github.com/ofplang/schedule), shown against the
+[ofplang](https://github.com/ofplang/spec) workflow they came from.
+
+The name says the scope: this visualises **`ofp-schedule`'s output**. Views
+specific to `ofp-run` or `labcode` are not in it.
 
 The point is to be able to hand someone a URL. They open it and see the
 dataflow graph and the Gantt chart of a plan side by side, linked: pick a bar
@@ -39,7 +42,7 @@ refused rather than guessed at.
 ## Working on it
 
 ```sh
-git clone --recurse-submodules <this repo>
+git clone --recurse-submodules git@github.com:kaizu/ofplang-schedule-viewer.git
 cd web
 npm install
 
