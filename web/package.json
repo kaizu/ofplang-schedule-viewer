@@ -10,12 +10,17 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pretest:e2e": "npm run datasets",
+    "test:e2e": "playwright test",
+    "preshots": "npm run datasets",
+    "shots": "playwright test tests/e2e/shots.spec.ts"
   },
   "dependencies": {
     "yaml": "2.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "26.4.0",
     "typescript": "7.0.2",
     "vite": "8.2.2",

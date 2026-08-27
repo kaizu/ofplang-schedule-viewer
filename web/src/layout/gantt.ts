@@ -193,7 +193,7 @@ function activityLayout(scene: Scene): GanttLayout {
     .sort((x, y) => x.a.start - y.a.start || x.index - y.index);
 
   return {
-    lanes: order.map(({ a }) => ({ id: activityLabel(a), label: activityLabel(a), tag: a.kind.slice(0, 5) })),
+    lanes: order.map(({ a }) => ({ id: activityLabel(a), label: activityLabel(a), tag: KIND_TAG[a.kind] })),
     bars: order.map(({ a, index }, lane) => ({
       lane,
       index,
@@ -204,6 +204,14 @@ function activityLayout(scene: Scene): GanttLayout {
     })),
   };
 }
+
+/** Short enough for the gutter, still a word. */
+const KIND_TAG: Readonly<Record<Activity["kind"], string>> = {
+  processing: "step",
+  transport: "move",
+  relay: "wait",
+  replenishment: "refill",
+};
 
 function styleOf(a: Activity): BarStyle {
   switch (a.kind) {

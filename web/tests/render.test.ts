@@ -133,11 +133,15 @@ describe("the rendered SVG", () => {
     expect(hits.size).toBe(plateBatch.activities.length);
   });
 
-  it("declares the hatch pattern its held bars need", () => {
-    // The reference itself lives in the stylesheet (`.bar.held { fill: url(#held) }`),
-    // so what the markup owes is the definition and the class.
-    expect(g.plot).toContain('<pattern id="held"');
-    expect(g.plot).toMatch(/class="bar held[^"]*"/);
+  it("marks a held device with a band, not a bar", () => {
+    const held = [...g.plot.matchAll(/class="bar held[^"]*"[^>]*height="([\d.]+)"/g)].map((m) =>
+      Number(m[1]),
+    );
+    const work = [...g.plot.matchAll(/class="bar processing[^"]*"[^>]*height="([\d.]+)"/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(held.length).toBeGreaterThan(0);
+    expect(Math.max(...held)).toBeLessThan(Math.min(...work));
   });
 
   it("labels the axis with the document's unit", () => {

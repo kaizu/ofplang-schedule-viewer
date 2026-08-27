@@ -39,11 +39,10 @@ function chartStyle(resolve: (token: string) => string): string {
     .bar { rx: 3 }
     .bar.processing { fill: ${v("--processing")} }
     .bar.transport, .bar.relay, .bar.replenishment { fill: ${v("--transport")} }
-    .bar.held { fill: url(#held); stroke: ${v("--transport")}; stroke-width: 1; stroke-opacity: .45 }
+    .bar.held { fill: ${v("--transport")}; fill-opacity: .42; rx: 1 }
     .bar.done { opacity: .55 }
     .bar.dim { opacity: .16 }
     .bar.lit { stroke: ${v("--ink")}; stroke-width: 2 }
-    .held-ln { stroke: ${v("--transport")}; stroke-width: 2; opacity: .45 }
     .bar-tx { fill: ${v("--on-data")}; font-family: "IBM Plex Mono",monospace; font-size: 9.5px }
     .bar-tx.outside { fill: ${v("--muted")} }
     .nowline { stroke: ${v("--now")}; stroke-width: 1.5; stroke-dasharray: 4 3 }

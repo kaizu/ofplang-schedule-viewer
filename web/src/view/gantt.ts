@@ -12,7 +12,9 @@ import { makeScale, unitAbbrev, type Scale } from "../layout/scale";
 import type { Scene } from "../model/scene";
 
 export const LANE_H = 27;
+const LANE_H_MAX = 44;
 const BAR_H = 13;
+const HELD_H = 4;
 const AXIS_H = 27;
 export const GUTTER_W = 176;
 
@@ -33,6 +35,8 @@ export interface GanttOptions {
   /** Activity indices to emphasise; everything else dims. Empty = no selection. */
   readonly lit: ReadonlySet<number>;
   readonly showLabels: boolean;
+  /** Height of the box the chart sits in; short charts grow to fill it. */
+  readonly availableHeight?: number;
 }
 
 const esc = (s: string): string =>
@@ -40,42 +44,73 @@ const esc = (s: string): string =>
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** IBM Plex Mono at 9.5px runs about 5.7px to the character. */
+const CH = 5.7;
+
+/** The label, trimmed to the room available — or nothing, if there is none. */
+function fit(label: string, room: number): string {
+  if (room < CH * 3) return "";
+  const max = Math.floor(room / CH);
+  return label.length <= max ? label : clip(label, max);
+}
+
 export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
   const { lanes, bars } = ganttLayout(scene, opts.view);
-  const height = Math.max(lanes.length * LANE_H + 4, 48);
+  // A four-lane plan stranded at the top of a tall pane looks unfinished. Give
+  // the lanes the spare room, up to a point — past that the rows stop reading
+  // as one chart.
+  const laneH =
+    opts.availableHeight && lanes.length
+      ? Math.max(LANE_H, Math.min(LANE_H_MAX, Math.floor((opts.availableHeight - 6) / lanes.length)))
+      : LANE_H;
+  const height = Math.max(lanes.length * laneH + 4, 48);
   const width = Math.max(240, opts.baseWidth * opts.zoom);
   const scale = makeScale(Math.max(scene.metrics.makespan, scene.metrics.horizon), width);
   const active = opts.lit.size > 0;
 
   const gutter: string[] = [];
-  const plot: string[] = [
-    `<defs><pattern id="held" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
-      `<line class="held-ln" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`,
-  ];
+  const plot: string[] = [];
 
   lanes.forEach((lane, i) => {
-    const y = i * LANE_H;
+    const y = i * laneH;
     if (i % 2) {
-      gutter.push(`<rect class="lane-alt" x="0" y="${y}" width="${GUTTER_W}" height="${LANE_H}"/>`);
-      plot.push(`<rect class="lane-alt" x="0" y="${y}" width="${width}" height="${LANE_H}"/>`);
+      gutter.push(`<rect class="lane-alt" x="0" y="${y}" width="${GUTTER_W}" height="${laneH}"/>`);
+      plot.push(`<rect class="lane-alt" x="0" y="${y}" width="${width}" height="${laneH}"/>`);
     }
     gutter.push(
-      `<text class="lane-label" x="10" y="${y + LANE_H / 2 + 3.5}">${esc(clip(lane.label, 21))}</text>`,
+      `<text class="lane-label" x="10" y="${y + laneH / 2 + 3.5}">${esc(clip(lane.label, 21))}</text>`,
     );
     if (lane.tag)
       gutter.push(
-        `<text class="lane-tag" x="${GUTTER_W - 8}" y="${y + LANE_H / 2 + 3}" text-anchor="end">${esc(lane.tag)}</text>`,
+        `<text class="lane-tag" x="${GUTTER_W - 8}" y="${y + laneH / 2 + 3}" text-anchor="end">${esc(lane.tag)}</text>`,
       );
-    gutter.push(`<line class="lane-rule" x1="0" y1="${y + LANE_H}" x2="${GUTTER_W}" y2="${y + LANE_H}"/>`);
-    plot.push(`<line class="lane-rule" x1="0" y1="${y + LANE_H}" x2="${width}" y2="${y + LANE_H}"/>`);
+    gutter.push(`<line class="lane-rule" x1="0" y1="${y + laneH}" x2="${GUTTER_W}" y2="${y + laneH}"/>`);
+    plot.push(`<line class="lane-rule" x1="0" y1="${y + laneH}" x2="${width}" y2="${y + laneH}"/>`);
   });
 
   for (const t of scale.ticks)
     plot.push(`<line class="grid-ln" x1="${scale.x(t)}" y1="0" x2="${scale.x(t)}" y2="${height}"/>`);
 
+  // Labels are placed against their neighbours, not just against the plot
+  // edge: a bar's caption sits in the gap before whatever comes next on the
+  // same lane, and is dropped when that gap is too small. Without this a busy
+  // lane — a single transporter running 22 moves — renders as overlapping
+  // fragments of a dozen words.
+  const occupied = new Map<number, number[]>();
+  for (const bar of bars) {
+    const list = occupied.get(bar.lane);
+    if (list) list.push(scale.x(bar.start));
+    else occupied.set(bar.lane, [scale.x(bar.start)]);
+  }
+  for (const list of occupied.values()) list.sort((a, b) => a - b);
+  const nextStartOn = (lane: number, after: number): number => {
+    for (const x of occupied.get(lane) ?? []) if (x > after + 0.5) return x;
+    return width;
+  };
+
   for (const bar of bars) {
     const a = scene.activities[bar.index]!;
-    const y = bar.lane * LANE_H + (LANE_H - BAR_H) / 2;
+    const y = bar.lane * laneH + (laneH - BAR_H) / 2;
     const on = !active || opts.lit.has(bar.index);
     const cls = [
       "bar",
@@ -101,19 +136,25 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
     const x1 = scale.x(bar.end);
     const held = bar.style === "held";
     const w = Math.max(2.5, x1 - x0 - 2);
-    const h = held ? BAR_H - 4 : BAR_H;
+    // A held device is secondary information — the machine is blocked, but
+    // nothing is happening on it. A band under the row says that without
+    // competing with the work itself.
+    const h = held ? HELD_H : BAR_H;
     plot.push(
-      `<rect class="${cls}" data-i="${bar.index}" x="${x0 + 1}" y="${held ? y + 2 : y}" width="${w}" height="${h}"/>`,
+      `<rect class="${cls}" data-i="${bar.index}" x="${x0 + 1}" y="${held ? y + BAR_H - HELD_H : y}" width="${w}" height="${h}"/>`,
     );
 
     if (!opts.showLabels || !bar.label || held) continue;
-    const room = bar.label.length * 5.8 + 8;
-    if (w > room)
-      plot.push(`<text class="bar-tx" x="${x0 + 5}" y="${y + BAR_H - 3.5}">${esc(bar.label)}</text>`);
-    else if (x1 + 4 + room < width)
-      plot.push(
-        `<text class="bar-tx outside" x="${x1 + 5}" y="${y + BAR_H - 3.5}">${esc(clip(bar.label, 20))}</text>`,
-      );
+    const baseline = y + BAR_H - 3.5;
+    const inside = fit(bar.label, w - 9);
+    if (inside)
+      plot.push(`<text class="bar-tx" x="${x0 + 5}" y="${baseline}">${esc(inside)}</text>`);
+    else {
+      const gap = nextStartOn(bar.lane, x0) - x1 - 9;
+      const outside = fit(bar.label, gap);
+      if (outside)
+        plot.push(`<text class="bar-tx outside" x="${x1 + 5}" y="${baseline}">${esc(outside)}</text>`);
+    }
   }
 
   const axis: string[] = [

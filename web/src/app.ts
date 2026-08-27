@@ -147,9 +147,10 @@ function renderChart(): void {
   const scene = state.scene;
   if (!scene) return;
 
-  // The gutter is inside the scrolling row, so the plot's own width is what is
-  // left of it.
-  const base = Math.max(360, el("body-row").clientWidth - GUTTER_W - 18);
+  // Measured from the pane, never from the scrolling row: the row is sized by
+  // what is inside it, so measuring there feeds each zoom back into the next
+  // one. The gutter sits inside that width, so the plot gets what is left.
+  const base = Math.max(360, el("chart").clientWidth - GUTTER_W - 18);
   const lit = new Set<number>();
   if (state.selected !== undefined) for (const i of sameArc(scene, state.selected)) lit.add(i);
 
@@ -159,6 +160,7 @@ function renderChart(): void {
     zoom: state.zoom,
     lit,
     showLabels: state.labels,
+    availableHeight: el("body-row").clientHeight,
   });
   state.geometry = g;
 

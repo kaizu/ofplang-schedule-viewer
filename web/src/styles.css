@@ -277,9 +277,9 @@ main {
   background: var(--transport);
 }
 .sw.held {
-  background: repeating-linear-gradient(45deg, transparent 0 2px, var(--transport) 2px 3.5px);
-  border: 1px solid var(--transport);
-  opacity: 0.85;
+  height: 4px;
+  background: var(--transport);
+  opacity: 0.42;
 }
 .sw.relay {
   width: 9px;
@@ -293,6 +293,10 @@ main {
 .axis-row {
   display: flex;
   border-bottom: 1px solid var(--hairline);
+  /* Same trap as `.chart`: without this the axis SVG's min-content width sets
+     the pane's grid column, and every zoom widens the box the next zoom is
+     measured from. Four clicks reached 27,000px. */
+  min-width: 0;
 }
 .axis-gutter {
   flex: 0 0 var(--gutter, 176px);
@@ -301,7 +305,19 @@ main {
 .axis-scroll {
   overflow: hidden;
   flex: 1 1 auto;
+  min-width: 0;
 }
+/* `min-width: 0` is load-bearing. A grid item's automatic minimum size is
+   min-content, so without it the zoomed plot forced this box — and with it the
+   pane's whole grid column, header included — wider than the column it sits
+   in, sliding the toolbar underneath the inspector. */
+.chart {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
 /* One scroll container for both axes.
    The gutter must not stretch to the visible height and clip the plot with it,
    which is what happens as soon as the plot gets its own `overflow-y`: a flex
@@ -315,6 +331,7 @@ main {
   align-items: flex-start;
   overflow: auto;
   min-height: 0;
+  min-width: 0;
 }
 .gut {
   flex: 0 0 var(--gutter, 176px);
@@ -385,10 +402,13 @@ svg {
   fill: var(--transport);
 }
 .bar.held {
-  fill: url(#held);
-  stroke: var(--transport);
-  stroke-width: 1;
-  stroke-opacity: 0.45;
+  /* A 4px band: at this size a hatch is illegible and a rounded outline reads
+     as a glyph, so the encoding is size and position instead — the same hue as
+     the move that causes it, sitting under the row rather than filling it. */
+  fill: var(--transport);
+  fill-opacity: 0.42;
+  rx: 1;
+  stroke: none;
 }
 .bar.done {
   opacity: 0.55;
@@ -523,12 +543,16 @@ dd {
   white-space: nowrap;
 }
 .ubar .track {
+  display: block;
   height: 7px;
   background: var(--sunken);
   border-radius: 2px;
   overflow: hidden;
 }
 .ubar .fill {
+  /* A <span> is inline, and an inline box ignores width and height — these
+     meters rendered as empty tracks until this line existed. */
+  display: block;
   height: 100%;
   border-radius: 2px;
   background: var(--processing);
