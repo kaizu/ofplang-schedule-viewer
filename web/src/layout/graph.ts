@@ -14,7 +14,8 @@
 import type { GraphNode } from "../model/graph";
 
 export const NODE_W = 178;
-const HEADER_H = 22;
+/** Tall enough that the badge and the descenders clear the rule beneath. */
+const HEADER_H = 24;
 const PORT_ROW = 15;
 const NODE_PAD_B = 7;
 const GAP_X = 58;

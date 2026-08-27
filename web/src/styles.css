@@ -345,7 +345,11 @@ main {
   fill: var(--sunken);
   stroke: var(--border);
 }
-.gnode .btext,
+.gnode .btext {
+  fill: var(--muted);
+  font-size: 8.5px;
+  font-weight: 500;
+}
 .gnode .chev {
   fill: var(--muted);
   font-size: 9px;

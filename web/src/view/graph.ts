@@ -128,22 +128,23 @@ function shell(n: LaidNode, cls: string): string {
 function leaf(n: LaidNode, cls: string): string {
   const parts = [`<g class="${cls}" data-key="${esc(n.key)}" transform="translate(${r(n.x)},${r(n.y)})">`];
   parts.push(`<rect class="box" width="${r(n.w)}" height="${r(n.h)}"/>`);
-  parts.push(`<text class="nid" x="10" y="15">${esc(clip(n.node.id, 15))}</text>`);
+  parts.push(`<text class="nid" x="10" y="16">${esc(clip(n.node.id, 15))}</text>`);
 
   if (n.node.kind === "composite") {
-    // The badge is the affordance and the count at once (D11).
-    const w = 40;
-    parts.push(`<rect class="badge" x="${r(n.w) - w - 8}" y="4" width="${w}" height="14" rx="3"/>`);
+    // The badge is the affordance and the count at once (D11). It sits inside
+    // the header with room to spare — at fourteen pixels it landed on the rule.
+    const w = 38;
+    parts.push(`<rect class="badge" x="${r(n.w) - w - 8}" y="5" width="${w}" height="12" rx="3"/>`);
     parts.push(
-      `<text class="btext" x="${r(n.w) - w / 2 - 8}" y="14.5" text-anchor="middle">▸ ×${n.node.atomicCount}</text>`,
+      `<text class="btext" x="${r(n.w) - w / 2 - 8}" y="13.8" text-anchor="middle">▸ ×${n.node.atomicCount}</text>`,
     );
   } else if (n.node.process !== n.node.id) {
     parts.push(
-      `<text class="nsub" x="${r(n.w) - 9}" y="15" text-anchor="end">${esc(clip(n.node.process, 16))}</text>`,
+      `<text class="nsub" x="${r(n.w) - 9}" y="16" text-anchor="end">${esc(clip(n.node.process, 16))}</text>`,
     );
   }
 
-  parts.push(`<line class="rule" x1="0" y1="${HEADER_H - 4}" x2="${r(n.w)}" y2="${HEADER_H - 4}"/>`);
+  parts.push(`<line class="rule" x1="0" y1="${HEADER_H - 3}" x2="${r(n.w)}" y2="${HEADER_H - 3}"/>`);
   parts.push(ports(n));
   parts.push("</g>");
   return parts.join("");
