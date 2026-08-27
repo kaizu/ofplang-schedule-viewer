@@ -11,31 +11,31 @@
  * invariants only break when something the viewer actually relies on changes.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import { arcKey, deviceOf } from "../../src/model/common";
 import { hasArc } from "../../src/model/document";
 import { readExecutionDocumentText } from "../../src/read";
+import { documentFiles, inputDocumentFiles, read, statusFiles } from "./corpus";
 
-const OUTPUTS = fileURLToPath(
-  new URL("../../../external/ofplang-schedule/examples/outputs/", import.meta.url),
-);
-
-const documents = readdirSync(OUTPUTS)
-  .filter((f) => f.endsWith(".plan.yaml") || f.endsWith(".replan.yaml"))
-  .sort();
+const documents = documentFiles;
 
 // A pin that stopped shipping examples would otherwise pass this file silently.
 it("the pinned submodule ships execution documents", () => {
   expect(documents.length).toBeGreaterThanOrEqual(4);
 });
 
-for (const name of documents) describe(name, () => {
-  const doc = readExecutionDocumentText(readFileSync(join(OUTPUTS, name), "utf8"));
+// Status inputs (§7) and planning-input documents (§6.8 / §6.10) share the
+// execution-document schema and must read too, even though they carry no plan.
+for (const [dir, name] of [...statusFiles, ...inputDocumentFiles])
+  it(`reads ${name}`, () => {
+    const d = readExecutionDocumentText(read(dir, name));
+    expect(Array.isArray(d.activities)).toBe(true);
+    for (const a of d.activities) expect(a.end).toBeGreaterThanOrEqual(a.start);
+  });
+
+for (const [dir, name] of documents) describe(name, () => {
+  const doc = readExecutionDocumentText(read(dir, name));
 
   it("reads, and carries activities", () => {
     expect(doc.activities.length).toBeGreaterThan(0);
