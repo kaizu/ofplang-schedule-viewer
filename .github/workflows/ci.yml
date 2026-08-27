@@ -62,3 +62,47 @@ jobs:
           name: playwright-report
           path: web/playwright-report/
           retention-days: 7
+
+  pages:
+    # D1 only actually holds once there is a URL to hand someone. Gated on both
+    # other jobs, so a broken chart never becomes the published one.
+    needs: [check, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      # `base: "./"` in the Vite config is what lets the same build work from a
+      # project sub-path, a user site and a plain file:// open alike.
+      - run: npm run build
+        working-directory: web
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

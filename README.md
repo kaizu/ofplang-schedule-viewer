@@ -7,15 +7,20 @@ A static web viewer for the execution plans produced by
 The name says the scope: this visualises **`ofp-schedule`'s output**. Views
 specific to `ofp-run` or `labcode` are not in it.
 
+**→ [kaizu.github.io/ofplang-schedule-viewer](https://kaizu.github.io/ofplang-schedule-viewer/)**
+— eight plans are bundled; `?doc=plate_batch` opens one directly, and dropping
+your own YAML on the window works too.
+
 The point is to be able to hand someone a URL. They open it and see the
 dataflow graph and the Gantt chart of a plan side by side, linked: pick a bar
 and the workflow node it came from lights up, pick a node and every bar under
 it lights up. No install, no server, no Python.
 
-> **Status: early.** The Gantt side works — pick a bundled plan or drop your
-> own, read it three ways, select an activity, export the chart. The workflow
-> graph and the linking between the two are next. `prototype/` holds the
-> single-file look-and-feel study the visual decisions were made against.
+> **Status: early but usable.** Both panes work and are linked: pick a bar and
+> the workflow box it came from lights up, pick a box and everything under it
+> lights up in the plan. Plans can be exported as SVG or put in a link.
+> `prototype/` holds the single-file look-and-feel study the visual decisions
+> were made against.
 
 ## Layout
 
