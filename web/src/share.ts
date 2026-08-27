@@ -15,7 +15,8 @@
 export const MAX_FRAGMENT = 8000;
 
 export interface SharePayload {
-  readonly plan: unknown;
+  /** Absent when a workflow is being shared before anything scheduled from it. */
+  readonly plan?: unknown;
   readonly workflow?: unknown;
   readonly environment?: unknown;
   /** Selection and view, so a link reopens on what was being pointed at. */

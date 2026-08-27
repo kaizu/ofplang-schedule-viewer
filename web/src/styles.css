@@ -68,6 +68,13 @@
   box-sizing: border-box;
 }
 
+/* Any author rule that sets `display` beats the user agent's `[hidden]`, so a
+   flex or grid element stays on screen with the attribute set. Stating it once
+   here means `hidden` can be trusted everywhere. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -261,9 +268,31 @@ main {
   flex: 0 0 auto;
 }
 .pane > .graph-scroll,
-.pane > .chart {
+.pane > .chart,
+.pane > .pane-empty {
   flex: 1 1 auto;
   min-height: 0;
+}
+.pane-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.pane-empty b {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.pane-empty span {
+  max-width: 46ch;
+}
+.pane-empty code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
 }
 .hint {
   font-size: 11px;
@@ -615,9 +644,6 @@ svg {
   background: var(--sunken);
   font-size: 11.5px;
   color: var(--ink-2);
-}
-.banner[hidden] {
-  display: none;
 }
 .banner b {
   color: var(--now);

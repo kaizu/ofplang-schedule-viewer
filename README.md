@@ -8,8 +8,10 @@ The name says the scope: this visualises **`ofp-schedule`'s output**. Views
 specific to `ofp-run` or `labcode` are not in it.
 
 **→ [kaizu.github.io/ofplang-schedule-viewer](https://kaizu.github.io/ofplang-schedule-viewer/)**
-— eight plans are bundled; `?doc=plate_batch` opens one directly, and dropping
-your own YAML on the window works too.
+— eight plans are bundled; `?doc=plate_batch` opens one directly. Drop your own
+YAML on the window to read that instead: a plan, a workflow, an environment, or
+all three at once. A workflow on its own is fine — the graph does not need a
+plan to be read.
 
 The point is to be able to hand someone a URL. They open it and see the
 dataflow graph and the Gantt chart of a plan side by side, linked: pick a bar

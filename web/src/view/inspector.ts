@@ -1,6 +1,8 @@
 /** The right-hand panel: the plan at a glance, or the selected activity. */
 
 import { arcKey, pathKey } from "../model/common";
+import { findNode, type GraphNode } from "../model/graph";
+import { activitiesUnder } from "../model/scene";
 import type { Activity } from "../model/document";
 import type { Scene } from "../model/scene";
 import { formatDuration, unitAbbrev } from "../layout/scale";
@@ -202,3 +204,85 @@ export function statusLine(scene: Scene, selected: number | undefined): string {
 }
 
 export type { Activity };
+
+
+/* ── with no plan loaded ─────────────────────────────────────────────────
+   The graph stands on its own: a workflow can be read before anything has
+   been scheduled from it, and that is when the feature gate is most useful. */
+
+export function renderWorkflowOverview(graph: GraphNode, blurb: string): string {
+  const out: string[] = [];
+  if (blurb) out.push(block("Loaded", `<div class="note">${esc(blurb)}</div>`));
+
+  out.push(
+    block(
+      "Workflow",
+      `<div class="lead">${esc(graph.process)}</div>` +
+        dl([
+          ["atomic steps", graph.atomicCount],
+          ["top-level nodes", graph.children.length],
+          ["entry inputs", Object.keys(graph.inputs).length],
+          ["entry outputs", Object.keys(graph.returns).length],
+        ]),
+    ),
+  );
+
+  out.push(
+    block(
+      "No plan",
+      `<div class="note">Nothing has been scheduled from this workflow yet. ` +
+        `Run <code>ofp-schedule schedule</code> on it and drop the plan here to see when each step runs.</div>`,
+    ),
+  );
+  return out.join("");
+}
+
+/** A box in the graph: what it is, and what it accounts for in the plan. */
+export function renderNodeDetail(graph: GraphNode, key: string, scene?: Scene): string {
+  const node = findNode(graph, key);
+  if (!node) return "";
+  const out: string[] = [];
+
+  out.push(
+    `<div><h3>${esc(node.kind)} node</h3><div class="lead">${esc(node.key || node.process)}</div></div>`,
+  );
+
+  const rows: (readonly [string, unknown])[] = [["process", node.process]];
+  if (node.kind === "composite") {
+    rows.push(["atomic steps", node.atomicCount], ["nodes inside", node.children.length]);
+  }
+  out.push(block("Node", dl(rows)));
+
+  if (node.inputs.length || node.outputs.length)
+    out.push(
+      block(
+        "Ports",
+        dl([
+          ...node.inputs.map((p) => ["in", p] as const),
+          ...node.outputs.map((p) => ["out", p] as const),
+        ]),
+      ),
+    );
+
+  if (scene) {
+    const under = activitiesUnder(scene, node.key === "" ? [] : node.key.split("."));
+    const acts = under.map((i) => scene.activities[i]!);
+    const steps = acts.filter((a) => a.kind === "processing").length;
+    const window =
+      acts.length > 0
+        ? `${Math.min(...acts.map((a) => a.start))} – ${Math.max(...acts.map((a) => a.end))} ${unitAbbrev(scene.unit)}`
+        : "—";
+    out.push(
+      block(
+        "In the plan",
+        dl([
+          ["steps", steps],
+          ["moves", acts.length - steps],
+          ["window", window],
+        ]),
+      ),
+    );
+  }
+
+  return out.join("");
+}

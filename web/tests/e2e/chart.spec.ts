@@ -6,6 +6,9 @@
  * to them: the SVG was correct and the CSS threw half of it away.
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { expect, test, type Page } from "@playwright/test";
 
 const open = async (page: Page, doc: string): Promise<void> => {
@@ -340,5 +343,70 @@ test.describe("provenance", () => {
     await open(page, "reroute_chain_replan");
     await expect(page.locator("#status-source")).toContainText("simple.workflow.yaml");
     await expect(page.locator("#status-source")).toContainText("reroute_chain.replan.yaml");
+  });
+});
+
+test.describe("a workflow on its own", () => {
+  const workflowYaml = readFileSync(
+    fileURLToPath(
+      new URL("../../../external/ofplang-schedule/examples/reformatter.workflow.yaml", import.meta.url),
+    ),
+    "utf8",
+  );
+
+  const dropWorkflow = async (page: Page): Promise<void> => {
+    const dataTransfer = await page.evaluateHandle((text) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([text], "reformatter.workflow.yaml", { type: "text/yaml" }));
+      return dt;
+    }, workflowYaml);
+    await page.dispatchEvent("body", "drop", { dataTransfer });
+  };
+
+  test("draws, and says plainly that there is no plan", async ({ page }) => {
+    await open(page, "simple");
+    await dropWorkflow(page);
+
+    await expect(page.locator("#graph g.gnode")).toHaveCount(9); // main plus eight steps
+    await expect(page.locator("#plan-empty")).toBeVisible();
+    await expect(page.locator("#chart")).toBeHidden();
+
+    // Nothing is claimed about a run that has not happened.
+    await expect(page.locator("#ro-outcome")).toHaveText("—");
+    await expect(page.locator("#ro-makespan")).toHaveText("—");
+    await expect(page.locator("#ro-count")).toHaveText("—");
+    await expect(page.locator("#export")).toBeDisabled();
+    await expect(page.locator('#views button[data-view="device"]')).toBeDisabled();
+
+    await expect(page.locator("#inspector")).toContainText("No plan");
+    await expect(page.locator("#inspector")).toContainText("8");
+
+    // The list and the address bar stop claiming the plan that was loaded.
+    await expect(page.locator("#dataset")).toHaveValue("__external__");
+    await expect(page.locator("#dataset option:checked")).toHaveText("reformatter.workflow.yaml");
+    expect(new URL(page.url()).searchParams.get("doc")).toBeNull();
+  });
+
+  test("a box still tells you what it is", async ({ page }) => {
+    await open(page, "simple");
+    await dropWorkflow(page);
+    await page.locator('#graph [data-key="Reformatter20"] rect.box').click();
+
+    await expect(page.locator("#inspector")).toContainText("reformatter_20");
+    await expect(page.locator("#inspector")).toContainText("rf20_in_rf12");
+    await expect(page.locator("#status-selection")).toContainText("Reformatter20");
+  });
+
+  test("fits in a link like anything else", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await open(page, "simple");
+    await dropWorkflow(page);
+    await page.locator("#share").click();
+    await expect(page.locator("#status-selection")).toContainText("Link copied");
+
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    await page.goto(url);
+    await expect(page.locator("#graph g.gnode")).toHaveCount(9);
+    await expect(page.locator("#plan-empty")).toBeVisible();
   });
 });

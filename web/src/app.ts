@@ -18,6 +18,9 @@ import {
 } from "./model/graph";
 import { activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import { copyShareLink, el, escapeHtml, placeTip, wireGraphPointer, wireSplitter } from "./interactions";
+import type { ExecutionDocument } from "./model/document";
+import type { Environment } from "./model/environment";
+import type { Workflow } from "./model/workflow";
 import { decodeShare } from "./share";
 import {
   gateSummary,
@@ -34,7 +37,13 @@ import {
 import { downloadSvg, ganttToSvg } from "./view/export";
 import { GUTTER_W, renderGantt, type GanttGeometry } from "./view/gantt";
 import { renderGraph } from "./view/graph";
-import { renderInspector, statusLine, tooltipFor } from "./view/inspector";
+import {
+  renderInspector,
+  renderNodeDetail,
+  renderWorkflowOverview,
+  statusLine,
+  tooltipFor,
+} from "./view/inspector";
 import { formatDuration } from "./layout/scale";
 
 interface DatasetIndexEntry {
@@ -205,7 +214,9 @@ export async function start(): Promise<void> {
     if (shared.ui?.view) state.view = shared.ui.view as GanttView;
     if (shared.ui?.expanded) state.expanded = new Set(shared.ui.expanded);
     buildViewButtons();
+    markExternal("shared link");
     renderAll();
+    requestAnimationFrame(() => fitGraph());
     return;
   }
 
@@ -251,7 +262,10 @@ function adopt(
   source: string,
   blurb: string,
 ): void {
-  const doc = readExecutionDocument(raw.plan);
+  // A workflow stands on its own — it can be read before anything has been
+  // scheduled from it, and that is when the feature gate is most useful. Only
+  // the plan pane needs a plan.
+  const doc = raw.plan ? readExecutionDocument(raw.plan) : undefined;
   const env = raw.environment ? readEnvironment(raw.environment) : undefined;
   const workflow = raw.workflow ? readWorkflow(raw.workflow) : undefined;
 
@@ -262,7 +276,7 @@ function adopt(
   state.zoom = 1;
   state.graphZoom = 1;
   state.expanded = new Set();
-  state.scene = buildScene(doc, env, workflow);
+  state.scene = doc ? buildScene(doc, env, workflow) : undefined;
   state.graph = workflow ? buildGraph(workflow) : undefined;
   state.raw = raw;
 }
@@ -271,21 +285,29 @@ function adopt(
 
 function renderAll(): void {
   const scene = state.scene;
-  if (!scene) return;
+  const graph = state.graph;
+  const sel = state.selected;
 
-  el("ro-outcome").textContent = scene.doc.outcome ?? "—";
-  el("ro-makespan").textContent = formatDuration(scene.metrics.makespan, scene.unit);
-  el("ro-count").textContent = String(scene.activities.length);
+  el("ro-outcome").textContent = scene?.doc.outcome ?? "—";
+  el("ro-makespan").textContent = scene ? formatDuration(scene.metrics.makespan, scene.unit) : "—";
+  el("ro-count").textContent = scene ? String(scene.activities.length) : "—";
   el("status-source").textContent = state.source;
+
   el("status-selection").textContent =
-    state.selected?.kind === "node"
-      ? `Selected node · ${state.selected.key || scene.workflow?.entry || "entry"}`
-      : statusLine(scene, state.selected?.index);
-  el("inspector").innerHTML = renderInspector(
-    scene,
-    state.selected?.kind === "activity" ? state.selected.index : undefined,
-    state.blurb,
-  );
+    sel?.kind === "node"
+      ? `Selected node · ${sel.key || graph?.process || "entry"}`
+      : scene
+        ? statusLine(scene, sel?.kind === "activity" ? sel.index : undefined)
+        : "Nothing selected — click a box";
+
+  el("inspector").innerHTML =
+    sel?.kind === "node" && graph
+      ? renderNodeDetail(graph, sel.key, scene)
+      : scene
+        ? renderInspector(scene, sel?.kind === "activity" ? sel.index : undefined, state.blurb)
+        : graph
+          ? renderWorkflowOverview(graph, state.blurb)
+          : "";
 
   renderBanner();
   renderGraphPane();
@@ -318,7 +340,9 @@ function renderGraphPane(): void {
   host.setAttribute("height", String(Math.round(g.height * state.graphZoom)));
   host.innerHTML = g.svg;
 
-  hint.textContent = `${graph.process} · ${graph.atomicCount} atomic steps · click a box to link it to the plan`;
+  hint.textContent =
+    `${graph.process} · ${graph.atomicCount} atomic steps · ` +
+    (state.scene ? "click a box to link it to the plan" : "click a box for what it is");
 }
 
 function fitGraph(attempt = 0): void {
@@ -342,6 +366,11 @@ function fitGraph(attempt = 0): void {
 
 function renderChart(): void {
   const scene = state.scene;
+  el("plan-empty").hidden = !!scene;
+  el("chart").hidden = !scene;
+  for (const id of ["labels", "zoom-in", "zoom-out", "zoom-fit", "export"])
+    el<HTMLButtonElement>(id).disabled = !scene;
+  for (const b of el("views").querySelectorAll("button")) (b as HTMLButtonElement).disabled = !scene;
   if (!scene) return;
 
   // Measured from the pane, never from the scrolling row: the row is sized by
@@ -401,6 +430,29 @@ const hideBanner = (): void => {
   el("banner").hidden = true;
 };
 
+const DROPPED = "__external__";
+
+/**
+ * What is on screen did not come from the list, so the list must stop claiming
+ * it did — and the `?doc=` in the address bar must stop pointing at a plan
+ * nobody is looking at.
+ */
+function markExternal(label: string): void {
+  const picker = el<HTMLSelectElement>("dataset");
+  let option = picker.querySelector<HTMLOptionElement>(`option[value="${DROPPED}"]`);
+  if (!option) {
+    option = document.createElement("option");
+    option.value = DROPPED;
+    picker.prepend(option);
+  }
+  option.textContent = label;
+  picker.value = DROPPED;
+
+  const url = new URL(location.href);
+  url.searchParams.delete("doc");
+  history.replaceState(null, "", url);
+}
+
 /* ── controls ──────────────────────────────────────────────────────────── */
 
 function buildViewButtons(): void {
@@ -421,7 +473,9 @@ function wireControls(): void {
   });
 
   el<HTMLSelectElement>("dataset").addEventListener("change", (e) => {
-    void loadDataset((e.target as HTMLSelectElement).value).then(() => fitGraph());
+    const id = (e.target as HTMLSelectElement).value;
+    if (id === DROPPED) return;
+    void loadDataset(id).then(() => fitGraph());
   });
 
   el<HTMLSelectElement>("theme").addEventListener("change", (e) => {
@@ -488,10 +542,10 @@ function wireControls(): void {
   el("graph-fit").addEventListener("click", () => fitGraph());
   el("share").addEventListener("click", () => {
     const raw = state.raw;
-    if (!raw?.plan) return;
+    if (!raw || (!raw.plan && !raw.workflow)) return;
     void copyShareLink(
       {
-        plan: raw.plan,
+        ...(raw.plan ? { plan: raw.plan } : {}),
         ...(raw.workflow ? { workflow: raw.workflow } : {}),
         ...(raw.environment ? { environment: raw.environment } : {}),
         ui: { view: state.view, expanded: [...state.expanded] },
@@ -575,9 +629,13 @@ function wirePointer(): void {
 
 /**
  * Files are sorted by what they turn out to be, not by their name: the reader
- * that accepts a file decides. A plan replaces the scene; a workflow or an
- * environment attaches to the plan already loaded, so the three can arrive in
- * any order and in any number of drops.
+ * that accepts a file decides.
+ *
+ * A drop replaces the whole set rather than merging into what is loaded. The
+ * alternative is worse than it sounds — dropping one workflow onto another
+ * plan pairs two documents that have nothing to do with each other, and the
+ * viewer would draw the mismatch without a word. To see a plan against its
+ * workflow, drop both; the banner says what each file was taken as.
  */
 function wireDropTarget(): void {
   const overlay = el("drop");
@@ -604,10 +662,13 @@ function wireDropTarget(): void {
 async function acceptFiles(files: readonly File[]): Promise<void> {
   if (!files.length) return;
 
-  let doc = state.scene?.doc;
-  let env = state.scene?.env;
-  let workflow = state.scene?.workflow;
-  let gate = state.gate;
+  let doc: ExecutionDocument | undefined;
+  let env: Environment | undefined;
+  let workflow: Workflow | undefined;
+  let gate: GateReport | undefined;
+  let rawPlan: unknown = null;
+  let rawWorkflow: unknown = null;
+  let rawEnvironment: unknown = null;
   const accepted: string[] = [];
   const rejected: string[] = [];
 
@@ -615,6 +676,7 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
     const text = await file.text();
     try {
       doc = readExecutionDocumentText(text);
+      rawPlan = parseYaml(text);
       accepted.push(`${file.name} → plan`);
       state.selected = undefined;
       continue;
@@ -623,14 +685,17 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
     }
     try {
       workflow = readWorkflowText(text);
-      gate = gateWorkflow(parseYaml(text));
+      rawWorkflow = parseYaml(text);
+      gate = gateWorkflow(rawWorkflow);
       accepted.push(`${file.name} → workflow`);
+      state.selected = undefined;
       continue;
     } catch {
       /* not a workflow */
     }
     try {
       env = readEnvironmentText(text);
+      rawEnvironment = parseYaml(text);
       accepted.push(`${file.name} → environment`);
       continue;
     } catch (e) {
@@ -638,21 +703,24 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
     }
   }
 
-  if (!doc) {
+  if (!doc && !workflow) {
     showBanner("Nothing to draw yet.", [
       ...rejected.map(escapeHtml),
-      "Drop a plan — <code>ofp-schedule schedule … -o plan.yaml</code> writes one.",
+      "Drop a workflow to read it, or a plan to see when its steps run — " +
+        "<code>ofp-schedule schedule … -o plan.yaml</code> writes one.",
     ]);
     return;
   }
 
   state.gate = gate;
+  state.selected = undefined;
   state.blurb = accepted.join(", ");
   state.source = files.map((f) => f.name).join("  ·  ");
-  state.scene = buildScene(doc, env, workflow);
+  state.scene = doc ? buildScene(doc, env, workflow) : undefined;
   state.graph = workflow ? buildGraph(workflow) : undefined;
   state.expanded = new Set();
-  state.raw = { plan: null, workflow: null, environment: null };
+  state.raw = { plan: rawPlan, workflow: rawWorkflow, environment: rawEnvironment };
+  markExternal(files.length === 1 ? files[0]!.name : `${files.length} dropped files`);
   renderAll();
   fitGraph();
   if (rejected.length) showBanner("Some files were not used.", rejected.map(escapeHtml));
