@@ -47,6 +47,31 @@ test("the three views of the big one", async ({ page }) => {
   }
 });
 
+test("the workflow graph, and the link between the panes", async ({ page }) => {
+  await page.goto("/?doc=plate_batch");
+  await settle(page);
+  await shot(page, "graph.collapsed");
+
+  await page.locator('#graph [data-key="b2"] .btext').click();
+  await shot(page, "graph.one-branch-open");
+
+  await page.locator("#expand-all").click();
+  await shot(page, "graph.expanded");
+
+  await page.locator("#collapse-all").click();
+  await page.locator("#plot rect.bar.processing").nth(6).click();
+  await shot(page, "linked.bar-to-box");
+
+  await page.locator('#graph [data-key="b1"] rect.box').click();
+  await shot(page, "linked.box-to-bars");
+});
+
+test("the graph of a wide fan-out", async ({ page }) => {
+  await page.goto("/?doc=reformatter");
+  await settle(page);
+  await shot(page, "graph.reformatter");
+});
+
 test("a replan, and a selection", async ({ page }) => {
   await page.goto("/?doc=simple_replan");
   await settle(page);

@@ -36,6 +36,32 @@
       </div>
 
       <main>
+        <div class="stack" id="stack">
+        <section class="pane">
+          <div class="pane-hd">
+            <h2>Workflow</h2>
+            <span class="hint" id="graph-hint"></span>
+            <span class="spacer"></span>
+            <button id="expand-all">Expand all</button>
+            <button id="collapse-all">Collapse</button>
+            <div class="seg" role="group" aria-label="Graph zoom">
+              <button id="graph-out" aria-label="Zoom out">&minus;</button>
+              <button id="graph-fit">Fit</button>
+              <button id="graph-in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <div class="graph-scroll" id="graph-scroll"><svg id="graph"></svg></div>
+        </section>
+
+        <div
+          class="splitter"
+          id="splitter"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize the panes"
+          tabindex="0"
+        ></div>
+
         <section class="pane">
           <div class="pane-hd">
             <h2>Execution plan</h2>
@@ -54,6 +80,7 @@
               <button id="zoom-in" aria-label="Zoom in">+</button>
             </div>
             <button id="export">Export SVG</button>
+            <button id="share">Copy link</button>
           </div>
 
           <div class="banner" id="banner" hidden></div>
@@ -69,6 +96,7 @@
             </div>
           </div>
         </section>
+        </div>
 
         <aside><div class="insp" id="inspector"></div></aside>
       </main>

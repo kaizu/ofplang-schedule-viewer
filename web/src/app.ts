@@ -9,7 +9,16 @@
 import { parse as parseYaml } from "yaml";
 
 import { GANTT_VIEWS, type GanttView } from "./layout/gantt";
-import { buildScene, sameArc, type Scene } from "./model/scene";
+import {
+  ancestorKeys,
+  buildGraph,
+  compositeKeys,
+  visibleFor,
+  type GraphNode,
+} from "./model/graph";
+import { activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
+import { copyShareLink, el, escapeHtml, placeTip, wireGraphPointer, wireSplitter } from "./interactions";
+import { decodeShare } from "./share";
 import {
   gateSummary,
   gateWorkflow,
@@ -24,6 +33,7 @@ import {
 } from "./read";
 import { downloadSvg, ganttToSvg } from "./view/export";
 import { GUTTER_W, renderGantt, type GanttGeometry } from "./view/gantt";
+import { renderGraph } from "./view/graph";
 import { renderInspector, statusLine, tooltipFor } from "./view/inspector";
 import { formatDuration } from "./layout/scale";
 
@@ -45,26 +55,90 @@ interface DatasetPayload {
   readonly environment: unknown;
 }
 
+/** What is picked, in whichever pane the person picked it. */
+type Selection = { kind: "activity"; index: number } | { kind: "node"; key: string };
+
 interface State {
   index: DatasetIndexEntry[];
   scene?: Scene;
+  graph?: GraphNode;
+  expanded: Set<string>;
   blurb: string;
   source: string;
   gate?: GateReport;
   view: GanttView;
   zoom: number;
+  graphZoom: number;
   labels: boolean;
-  selected?: number;
+  selected?: Selection;
   geometry?: GanttGeometry;
+  split: number;
+  /** Kept so a share link can carry exactly what was loaded. */
+  raw?: { plan: unknown; workflow: unknown; environment: unknown };
 }
 
-const state: State = { index: [], blurb: "", source: "", view: "device", zoom: 1, labels: true };
-
-const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`missing element #${id}`);
-  return node as T;
+const state: State = {
+  index: [],
+  expanded: new Set(),
+  blurb: "",
+  source: "",
+  view: "device",
+  zoom: 1,
+  graphZoom: 1,
+  labels: true,
+  split: 42,
 };
+
+/* ── what lights up ─────────────────────────────────────────────────────
+   One selection, two panes. An activity names a node path, and the box that
+   stands for it may be an ancestor if that ancestor is closed (D11); a node
+   stands for everything beneath it. Both directions are lookups into indices
+   the scene already built. */
+
+function litActivities(): Set<number> {
+  const scene = state.scene;
+  const sel = state.selected;
+  const out = new Set<number>();
+  if (!scene || !sel) return out;
+
+  if (sel.kind === "activity") {
+    for (const i of sameArc(scene, sel.index)) out.add(i);
+    return out;
+  }
+  for (const i of activitiesUnder(scene, sel.key === "" ? [] : sel.key.split("."))) out.add(i);
+  return out;
+}
+
+function litNodes(): { lit: Set<string>; onPath: Set<string> } {
+  const lit = new Set<string>();
+  const onPath = new Set<string>();
+  const graph = state.graph;
+  const scene = state.scene;
+  const sel = state.selected;
+  if (!graph || !sel) return { lit, onPath };
+
+  if (sel.kind === "node") {
+    lit.add(sel.key);
+    for (const k of ancestorKeys(sel.key === "" ? [] : sel.key.split("."))) onPath.add(k);
+  } else if (scene) {
+    const activity = scene.activities[sel.index];
+    if (activity) {
+      const paths =
+        activity.kind === "processing"
+          ? [activity.node]
+          : activity.kind === "transport" || activity.kind === "relay"
+            ? [activity.arc.from.node, activity.arc.to.node]
+            : [];
+      for (const path of paths) {
+        const key = visibleFor(graph, path, state.expanded);
+        if (key !== undefined) lit.add(key);
+        for (const k of ancestorKeys(path)) onPath.add(k);
+      }
+    }
+  }
+  for (const k of lit) onPath.delete(k);
+  return { lit, onPath };
+}
 
 /* ── boot ──────────────────────────────────────────────────────────────── */
 
@@ -86,11 +160,30 @@ export async function start(): Promise<void> {
     .map((d) => `<option value="${d.id}">${escapeHtml(d.label)} · ${d.activities}</option>`)
     .join("");
 
+  const shared = await decodeShare(location.hash);
+  if (shared) {
+    adopt(
+      {
+        plan: shared.plan,
+        workflow: shared.workflow ?? null,
+        environment: shared.environment ?? null,
+      },
+      "shared link",
+      "Opened from a shared link.",
+    );
+    if (shared.ui?.view) state.view = shared.ui.view as GanttView;
+    if (shared.ui?.expanded) state.expanded = new Set(shared.ui.expanded);
+    buildViewButtons();
+    renderAll();
+    return;
+  }
+
   const wanted = new URLSearchParams(location.search).get("doc");
   const first = state.index.find((d) => d.id === wanted) ?? state.index[state.index.length - 1];
   if (first) {
     picker.value = first.id;
     await loadDataset(first.id);
+    fitGraph();
   } else {
     showBanner(
       "No bundled plans were found.",
@@ -111,19 +204,36 @@ async function loadDataset(id: string): Promise<void> {
   url.searchParams.set("doc", id);
   history.replaceState(null, "", url);
 
-  const doc = readExecutionDocument(payload.plan);
-  const env = payload.environment ? readEnvironment(payload.environment) : undefined;
-  const workflow = payload.workflow ? readWorkflow(payload.workflow) : undefined;
+  adopt(
+    payload,
+    [payload.source.plan, payload.source.workflow, payload.source.environment]
+      .filter(Boolean)
+      .join("  ·  "),
+    payload.blurb,
+  );
+  renderAll();
+}
 
-  state.gate = payload.workflow ? gateWorkflow(payload.workflow) : undefined;
-  state.blurb = payload.blurb;
-  state.source = [payload.source.plan, payload.source.workflow, payload.source.environment]
-    .filter(Boolean)
-    .join("  ·  ");
+/** Take a set of raw documents as the thing on screen. */
+function adopt(
+  raw: { plan: unknown; workflow: unknown; environment: unknown },
+  source: string,
+  blurb: string,
+): void {
+  const doc = readExecutionDocument(raw.plan);
+  const env = raw.environment ? readEnvironment(raw.environment) : undefined;
+  const workflow = raw.workflow ? readWorkflow(raw.workflow) : undefined;
+
+  state.gate = raw.workflow ? gateWorkflow(raw.workflow) : undefined;
+  state.blurb = blurb;
+  state.source = source;
   state.selected = undefined;
   state.zoom = 1;
+  state.graphZoom = 1;
+  state.expanded = new Set();
   state.scene = buildScene(doc, env, workflow);
-  renderAll();
+  state.graph = workflow ? buildGraph(workflow) : undefined;
+  state.raw = raw;
 }
 
 /* ── rendering ─────────────────────────────────────────────────────────── */
@@ -136,11 +246,61 @@ function renderAll(): void {
   el("ro-makespan").textContent = formatDuration(scene.metrics.makespan, scene.unit);
   el("ro-count").textContent = String(scene.activities.length);
   el("status-source").textContent = state.source;
-  el("status-selection").textContent = statusLine(scene, state.selected);
-  el("inspector").innerHTML = renderInspector(scene, state.selected, state.blurb);
+  el("status-selection").textContent =
+    state.selected?.kind === "node"
+      ? `Selected node · ${state.selected.key || scene.workflow?.entry || "entry"}`
+      : statusLine(scene, state.selected?.index);
+  el("inspector").innerHTML = renderInspector(
+    scene,
+    state.selected?.kind === "activity" ? state.selected.index : undefined,
+    state.blurb,
+  );
 
   renderBanner();
+  renderGraphPane();
   renderChart();
+}
+
+function renderGraphPane(): void {
+  const graph = state.graph;
+  const host = el<SVGSVGElement & HTMLElement>("graph");
+  const hint = el("graph-hint");
+
+  if (!graph) {
+    host.removeAttribute("width");
+    host.removeAttribute("height");
+    host.innerHTML = "";
+    hint.textContent = "No workflow was loaded with this plan.";
+    return;
+  }
+
+  const { lit, onPath } = litNodes();
+  const g = renderGraph(graph, { expanded: state.expanded, lit, onPath });
+  host.setAttribute("viewBox", `-2 -2 ${g.width} ${g.height}`);
+  host.setAttribute("width", String(Math.round(g.width * state.graphZoom)));
+  host.setAttribute("height", String(Math.round(g.height * state.graphZoom)));
+  host.innerHTML = g.svg;
+
+  hint.textContent = `${graph.process} · ${graph.atomicCount} atomic steps · click a box to link it to the plan`;
+}
+
+function fitGraph(attempt = 0): void {
+  const graph = state.graph;
+  if (!graph) return;
+  const box = el("graph-scroll");
+
+  // Fitting against a box the browser has not laid out yet produces a postage
+  // stamp. Wait a frame — but not forever, since the pane really can be this
+  // small once the divider is dragged up.
+  if ((box.clientWidth < 120 || box.clientHeight < 80) && attempt < 12) {
+    requestAnimationFrame(() => fitGraph(attempt + 1));
+    return;
+  }
+
+  const g = renderGraph(graph, { expanded: state.expanded, lit: new Set(), onPath: new Set() });
+  const scale = Math.min((box.clientWidth - 36) / g.width, (box.clientHeight - 36) / g.height);
+  state.graphZoom = Math.max(0.3, Math.min(1.5, scale));
+  renderGraphPane();
 }
 
 function renderChart(): void {
@@ -151,8 +311,7 @@ function renderChart(): void {
   // what is inside it, so measuring there feeds each zoom back into the next
   // one. The gutter sits inside that width, so the plot gets what is left.
   const base = Math.max(360, el("chart").clientWidth - GUTTER_W - 18);
-  const lit = new Set<number>();
-  if (state.selected !== undefined) for (const i of sameArc(scene, state.selected)) lit.add(i);
+  const lit = litActivities();
 
   const g = renderGantt(scene, {
     view: state.view,
@@ -225,7 +384,7 @@ function wireControls(): void {
   });
 
   el<HTMLSelectElement>("dataset").addEventListener("change", (e) => {
-    void loadDataset((e.target as HTMLSelectElement).value);
+    void loadDataset((e.target as HTMLSelectElement).value).then(() => fitGraph());
   });
 
   el<HTMLSelectElement>("theme").addEventListener("change", (e) => {
@@ -267,6 +426,62 @@ function wireControls(): void {
     el("axis-scroll").scrollLeft = el("body-row").scrollLeft;
   });
 
+  el("expand-all").addEventListener("click", () => {
+    if (!state.graph) return;
+    state.expanded = new Set(compositeKeys(state.graph));
+    // Deliberately not fitted: twenty-two steps in a row shrink to a smear.
+    // Full size and scrollable beats visible and unreadable.
+    state.graphZoom = 1;
+    renderAll();
+    el("graph-scroll").scrollTo({ top: 0, left: 0 });
+  });
+  el("collapse-all").addEventListener("click", () => {
+    state.expanded = new Set();
+    renderAll();
+    fitGraph();
+  });
+  el("graph-in").addEventListener("click", () => {
+    state.graphZoom = Math.min(2.4, state.graphZoom * 1.25);
+    renderGraphPane();
+  });
+  el("graph-out").addEventListener("click", () => {
+    state.graphZoom = Math.max(0.25, state.graphZoom / 1.25);
+    renderGraphPane();
+  });
+  el("graph-fit").addEventListener("click", () => fitGraph());
+  el("share").addEventListener("click", () => {
+    const raw = state.raw;
+    if (!raw?.plan) return;
+    void copyShareLink(
+      {
+        plan: raw.plan,
+        ...(raw.workflow ? { workflow: raw.workflow } : {}),
+        ...(raw.environment ? { environment: raw.environment } : {}),
+        ui: { view: state.view, expanded: [...state.expanded] },
+      },
+      flash,
+      (headline, detail) => showBanner(headline, [escapeHtml(detail)]),
+    );
+  });
+
+  wireGraphPointer({
+    graph: () => state.graph,
+    expanded: () => state.expanded,
+    onToggle: (key) => {
+      if (state.expanded.has(key)) state.expanded.delete(key);
+      else state.expanded.add(key);
+      renderAll();
+    },
+    onSelect: (key) => select(key === undefined ? undefined : { kind: "node", key }),
+  });
+  wireSplitter(
+    () => state.split,
+    (pct) => {
+      state.split = pct;
+    },
+    renderChart,
+  );
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") select(undefined);
   });
@@ -274,12 +489,21 @@ function wireControls(): void {
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderChart, 120);
+    resizeTimer = setTimeout(() => {
+      renderChart();
+      renderGraphPane();
+    }, 120);
   });
 }
 
-function select(index: number | undefined): void {
-  state.selected = state.selected === index ? undefined : index;
+function same(a: Selection | undefined, b: Selection | undefined): boolean {
+  if (!a || !b || a.kind !== b.kind) return false;
+  return a.kind === "activity" ? a.index === (b as typeof a).index : a.key === (b as typeof a).key;
+}
+
+/** Picking the same thing twice puts it down. */
+function select(next: Selection | undefined): void {
+  state.selected = same(state.selected, next) ? undefined : next;
   renderAll();
 }
 
@@ -291,7 +515,7 @@ function wirePointer(): void {
 
   plot.addEventListener("click", (e) => {
     const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i]");
-    select(hit ? Number(hit.dataset["i"]) : undefined);
+    select(hit ? { kind: "activity", index: Number(hit.dataset["i"]) } : undefined);
   });
 
   plot.addEventListener("mousemove", (e) => {
@@ -302,12 +526,7 @@ function wirePointer(): void {
       return;
     }
     tip.innerHTML = tooltipFor(scene, Number(hit.dataset["i"]));
-    tip.style.display = "block";
-    const box = tip.getBoundingClientRect();
-    const x = e.clientX + 14 + box.width > innerWidth - 8 ? e.clientX - box.width - 12 : e.clientX + 14;
-    const y = e.clientY + 14 + box.height > innerHeight - 8 ? e.clientY - box.height - 12 : e.clientY + 14;
-    tip.style.left = `${x}px`;
-    tip.style.top = `${y}px`;
+    placeTip(tip, e);
   });
 
   plot.addEventListener("mouseleave", () => {
@@ -394,9 +613,24 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
   state.blurb = accepted.join(", ");
   state.source = files.map((f) => f.name).join("  ·  ");
   state.scene = buildScene(doc, env, workflow);
+  state.graph = workflow ? buildGraph(workflow) : undefined;
+  state.expanded = new Set();
+  state.raw = { plan: null, workflow: null, environment: null };
   renderAll();
+  fitGraph();
   if (rejected.length) showBanner("Some files were not used.", rejected.map(escapeHtml));
 }
 
-const escapeHtml = (s: string): string =>
-  s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** A transient line in the status strip; the selection returns after it. */
+function flash(message: string): void {
+  const status = el("status-selection");
+  const previous = status.textContent ?? "";
+  status.textContent = message;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => {
+    status.textContent = previous;
+  }, 4000);
+}

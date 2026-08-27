@@ -91,14 +91,16 @@ test.describe("the page never scrolls sideways as a whole", () => {
 
   test("even zoomed in, where a wide plot could force the pane open", async ({ page }) => {
     await open(page, "plate_batch");
-    const paneBefore = (await page.locator(".pane-hd").boundingBox())!.width;
+    // There are two pane headers now; this is the plan's.
+    const header = page.locator(".pane-hd").filter({ has: page.locator("#views") });
+    const paneBefore = (await header.boundingBox())!.width;
 
     for (let i = 0; i < 4; i++) await page.locator("#zoom-in").click();
 
     // The chart scrolls; the page around it does not move, and the toolbar
     // stays where it was rather than sliding under the inspector.
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
-    const paneAfter = (await page.locator(".pane-hd").boundingBox())!.width;
+    const paneAfter = (await header.boundingBox())!.width;
     expect(paneAfter).toBe(paneBefore);
     await expect(page.locator("#zoom-in")).toBeInViewport();
 
@@ -195,5 +197,87 @@ test.describe("bundled plans", () => {
       await expect(page.locator("#plot rect.bar").first()).toBeVisible();
       await expect(page.locator("#banner")).toBeHidden();
     }
+  });
+});
+
+test.describe("the workflow graph", () => {
+  test("shows the source structure, with a count on what is closed (D11)", async ({ page }) => {
+    await open(page, "plate_batch");
+
+    // main's four nodes, not the twenty-two steps inside two of them.
+    await expect(page.locator("#graph g.gnode.shut")).toHaveCount(4);
+    await expect(page.locator('#graph [data-key="b1"] .btext')).toHaveText("▸ ×10");
+    await expect(page.locator("#graph-hint")).toContainText("22 atomic steps");
+  });
+
+  test("opens a composite from its badge, and closes it again", async ({ page }) => {
+    await open(page, "plate_batch");
+    await page.locator('#graph [data-key="b2"] .btext').click();
+
+    await expect(page.locator('#graph [data-key="b2"]')).toHaveClass(/open/);
+    await expect(page.locator('#graph [data-key="b2.rep1"]')).toBeVisible();
+    // The other branch is untouched.
+    await expect(page.locator('#graph [data-key="b1"]')).toHaveClass(/shut/);
+
+    await page.locator('#graph [data-key="b2"] .chev').click();
+    await expect(page.locator('#graph [data-key="b2"]')).toHaveClass(/shut/);
+  });
+
+  test("draws one edge per port, not one per pair of boxes (D19)", async ({ page }) => {
+    await open(page, "reformatter");
+    // Reformatter20 reads from three different steps at once.
+    const edges = await page.locator("#graph path.edge").count();
+    expect(edges).toBeGreaterThanOrEqual(12);
+  });
+});
+
+test.describe("the two panes are linked", () => {
+  test("picking a bar lights the box it came from, however deep it is", async ({ page }) => {
+    await open(page, "plate_batch");
+    await page.locator("#plot rect.bar.processing").nth(6).click();
+
+    // The step is at b2/rep1/thermal; with b2 closed, b2 is what stands for it.
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(1);
+    await expect(page.locator('#graph [data-key="b2"]')).toHaveClass(/lit/);
+    await expect(page.locator("#inspector")).toContainText("b2.rep1.thermal");
+
+    // Open it, and the highlight follows down to the step itself.
+    await page.locator('#graph [data-key="b2"] .btext').click();
+    await page.locator('#graph [data-key="b2.rep1"] .btext').click();
+    await expect(page.locator('#graph [data-key="b2.rep1.thermal"]')).toHaveClass(/lit/);
+  });
+
+  test("picking a box lights everything under it, and nothing else", async ({ page }) => {
+    await open(page, "plate_batch");
+    await page.locator('#graph [data-key="b1"] rect.box').click();
+
+    await expect(page.locator("#status-selection")).toContainText("Selected node · b1");
+    const lit = await page.locator("#plot rect.bar.lit").count();
+    const dim = await page.locator("#plot rect.bar.dim").count();
+    expect(lit).toBeGreaterThan(9); // ten steps, plus the moves between them
+    expect(dim).toBeGreaterThan(lit);
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#plot rect.bar.lit")).toHaveCount(0);
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(0);
+  });
+});
+
+test.describe("a share link", () => {
+  test("carries the plan, and opens on it", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await open(page, "two_arms");
+    await page.locator("#share").click();
+    await expect(page.locator("#status-selection")).toContainText("Link copied");
+
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    expect(url).toContain("#d=");
+    expect(url.length).toBeLessThan(8000);
+
+    // A fresh page with only the fragment draws the same plan.
+    await page.goto(url);
+    await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+    await expect(page.locator("#ro-count")).toHaveText("6");
+    await expect(page.locator("#status-source")).toContainText("shared link");
   });
 });

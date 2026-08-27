@@ -219,12 +219,168 @@ main {
   }
 }
 
-.pane {
+/* Graph over Gantt, with a handle between them (D16). */
+.stack {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: var(--r1, 42fr) 6px var(--r2, 58fr);
+  min-height: 0;
+  min-width: 0;
+}
+.stack > * {
+  min-height: 0;
+  min-width: 0;
+}
+
+.splitter {
+  background: var(--border);
+  cursor: row-resize;
+  position: relative;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.splitter:hover,
+.splitter:focus-visible {
+  background: var(--processing);
+}
+
+/* A column, not a fixed grid: the graph pane has a header and a body, the plan
+   pane has a banner between them, and a `grid-template-rows` written for one
+   of them drops the other's body into an `auto` track sized to its content. */
+.pane {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   min-width: 0;
   background: var(--panel);
+}
+.pane > .pane-hd,
+.pane > .banner {
+  flex: 0 0 auto;
+}
+.pane > .graph-scroll,
+.pane > .chart {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.hint {
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── workflow graph ──────────────────────────────────────────────────── */
+.graph-scroll {
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 16px;
+  background: var(--sunken);
+  /* Centred while it fits, top-left once it does not — `safe` is what keeps
+     an overflowing diagram from having its beginning cut off. */
+  display: grid;
+  justify-content: safe center;
+  align-content: safe center;
+}
+
+.gnode .box {
+  fill: var(--panel);
+  stroke: var(--border);
+  stroke-width: 1;
+  rx: 3;
+}
+.gnode.open > .box {
+  fill: color-mix(in srgb, var(--panel) 62%, var(--sunken));
+}
+.gnode {
+  cursor: pointer;
+}
+.gnode:hover .box {
+  stroke: var(--ink-2);
+}
+.gnode.lit > .box {
+  stroke: var(--processing);
+  stroke-width: 2;
+}
+.gnode.lit .nid {
+  fill: var(--processing);
+}
+.gnode.on-path > .box {
+  stroke: var(--processing);
+  stroke-dasharray: 3 3;
+}
+.gnode.dim {
+  opacity: 0.32;
+}
+
+.gnode .nid {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.gnode .nsub {
+  fill: var(--faint);
+  font-size: 9px;
+  font-family: "IBM Plex Mono", monospace;
+}
+.gnode .pname {
+  fill: var(--muted);
+  font-size: 8.5px;
+  font-family: "IBM Plex Mono", monospace;
+}
+.gnode .pdot {
+  fill: var(--panel);
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.gnode .rule {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+.gnode .badge {
+  fill: var(--sunken);
+  stroke: var(--border);
+}
+.gnode .btext,
+.gnode .chev {
+  fill: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--faint);
+  stroke-width: 1.25;
+}
+.edge.data {
+  stroke-dasharray: 3 3;
+}
+.edge.lit {
+  stroke: var(--transport);
+  stroke-width: 2;
+}
+.edge.dim {
+  opacity: 0.22;
+}
+.arrow {
+  fill: var(--faint);
+}
+.arrow.lit {
+  fill: var(--transport);
+}
+.arrow.dim {
+  opacity: 0.22;
+}
+
+.graph-empty {
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .pane-hd {
