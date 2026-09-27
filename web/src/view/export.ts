@@ -39,6 +39,8 @@ function chartStyle(resolve: (token: string) => string): string {
     .axis-cap { fill: ${v("--muted")}; font-family: "IBM Plex Sans Condensed",sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: .08em }
     .bar { rx: 3 }
     .bar.processing { fill: ${v("--processing")} }
+    .bar.resting { fill: ${v("--processing")}; fill-opacity: .12; stroke: ${v("--processing")}; stroke-width: 1.5 }
+    .bar-tx.on-rest { fill: ${v("--ink-2")} }
     .bar.transport, .bar.relay { fill: ${v("--transport")} }
     .bar.replenishment { fill: ${v("--replenishment")} }
     .refill-plus { stroke: ${v("--on-data")}; stroke-width: 1.4; stroke-linecap: round }

@@ -264,3 +264,101 @@ activities:
     expect(lanes[bars[0]!.lane]!.id).toBe("(no device)");
   });
 });
+
+describe("holding without accessing (§4.4.2) — storage", () => {
+  const t = triples.find((x) => x.name === "storage")!;
+  const plan = readExecutionDocumentText(read(...t.plan));
+  const env = readEnvironmentText(read(...t.environment));
+  const scene = buildScene(plan, env);
+  const chills = scene.activities
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => a.kind === "processing" && a.deviceAccess === false);
+
+  it("reads the echo the plan writes where the mode does not access its device", () => {
+    expect(chills.length).toBeGreaterThan(0);
+  });
+
+  it("draws a resting step hollow in every view", () => {
+    for (const view of GANTT_VIEWS) {
+      const { bars } = ganttLayout(scene, view.id);
+      for (const { i } of chills) {
+        const mine = bars.filter((b) => b.index === i);
+        expect(mine.length, view.id).toBeGreaterThan(0);
+        for (const b of mine) expect(b.style, view.id).toBe("resting");
+      }
+    }
+  });
+
+  it("puts a resting step on the spot it holds, directly under its device", () => {
+    // Two chills share the fridge at once — legal, since neither accesses it —
+    // so on the fridge's own lane they would overlap. Each spot is exclusive.
+    const { lanes, bars } = ganttLayout(scene, "device");
+    const fridge = lanes.findIndex((l) => l.id === "fridge");
+    expect(fridge).toBeGreaterThanOrEqual(0);
+    for (const { a, i } of chills) {
+      const [bar, ...rest] = bars.filter((b) => b.index === i);
+      expect(rest).toEqual([]);
+      const lane = lanes[bar!.lane]!;
+      expect(lane.tag).toBe("spot");
+      expect(Object.values((a as { inputSpots?: Record<string, string> }).inputSpots ?? {})).toContain(lane.id);
+      expect(bar!.lane).toBeGreaterThan(fridge);
+      expect(lanes.slice(fridge + 1, bar!.lane + 1).every((l) => l.tag === "spot")).toBe(true);
+    }
+    // And no two bars on one lane overlap in time: every lane is one exclusive thing.
+    for (let lane = 0; lane < lanes.length; lane++) {
+      const on = bars
+        .filter((b) => b.lane === lane && b.style !== "held" && b.style !== "relay" && b.end > b.start)
+        .sort((x, y) => x.start - y.start);
+      for (let k = 1; k < on.length; k++)
+        expect(on[k]!.start, lanes[lane]!.id).toBeGreaterThanOrEqual(on[k - 1]!.end);
+    }
+  });
+
+  it("does not count resting time as the device being held", () => {
+    // Only moves in and out hold the fridge; the chills sit on it for far longer.
+    const fridge = scene.machines.find((m) => m.id === "fridge")!;
+    const moves = (scene.byMachine.get("fridge") ?? []).filter((i) => scene.activities[i]!.kind === "transport");
+    const held = moves.reduce((n, i) => n + scene.activities[i]!.end - scene.activities[i]!.start, 0);
+    expect(fridge.occupancy * scene.metrics.horizon).toBeLessThanOrEqual(held);
+    // …but a resting step is still found on the device it rests on.
+    for (const { i } of chills) expect(scene.byMachine.get("fridge")).toContain(i);
+  });
+
+  it("falls back to the environment's mode when the echo is left out", () => {
+    const stripped = readExecutionDocumentText(read(...t.plan).replace(/^\s*device_access: false\s*$/gm, ""));
+    expect(stripped.activities.some((a) => a.kind === "processing" && a.deviceAccess === false)).toBe(false);
+    const recovered = buildScene(stripped, env);
+    const { bars } = ganttLayout(recovered, "device");
+    for (const { i } of chills) expect(bars.find((b) => b.index === i)!.style).toBe("resting");
+  });
+});
+
+describe("a route that needs no transporter (§4.6)", () => {
+  const doc = (transporter: string) => `
+time: { unit: second }
+activities:
+  - kind: transport
+    start: 0
+    end: 3
+    from_spot: hotel.a
+    to_spot: hotel.b
+    ${transporter}
+    arc: { from: { node: [], port: plate }, to: { node: [Read], port: plate } }
+`;
+
+  it("reads `transporter: null` as a move nothing carries", () => {
+    const a = readExecutionDocumentText(doc("transporter: null")).activities[0]!;
+    expect(a.kind === "transport" && a.transporter).toBeFalsy();
+  });
+
+  it("refuses a real move that leaves the key out — null is the statement, an omission is not", () => {
+    expect(() => readExecutionDocumentText(doc(""))).toThrow(/null for none/);
+  });
+
+  it("draws the move on the devices that perform it, and on no transporter lane", () => {
+    const scene = buildScene(readExecutionDocumentText(doc("transporter: null")));
+    const { lanes, bars } = ganttLayout(scene, "device");
+    expect(bars.map((b) => [lanes[b.lane]!.id, b.style])).toEqual([["hotel", "transport"]]);
+    expect(scene.machines.find((m) => m.id === "hotel")!.occupancy).toBe(1);
+  });
+});

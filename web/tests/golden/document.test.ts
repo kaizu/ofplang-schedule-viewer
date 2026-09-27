@@ -15,8 +15,15 @@ import { describe, expect, it } from "vitest";
 
 import { arcKey, deviceOf } from "../../src/model/common";
 import { hasArc } from "../../src/model/document";
-import { readExecutionDocumentText } from "../../src/read";
-import { documentFiles, inputDocumentFiles, read, statusFiles } from "./corpus";
+import { readExecutionDocumentText, UnsupportedError } from "../../src/read";
+import {
+  documentFiles,
+  inputDocumentFiles,
+  jointDocumentFiles,
+  jointInputDocumentFiles,
+  read,
+  statusFiles,
+} from "./corpus";
 
 const documents = documentFiles;
 
@@ -32,6 +39,25 @@ for (const [dir, name] of [...statusFiles, ...inputDocumentFiles])
     const d = readExecutionDocumentText(read(dir, name));
     expect(Array.isArray(d.activities)).toBe(true);
     for (const a of d.activities) expect(a.end).toBeGreaterThanOrEqual(a.start);
+  });
+
+// A joint plan (§6.11) is refused, and refused *as* a plan with a reason —
+// not read as a single workflow, and not mistaken for some other document
+// (design.md D42). The pin ships some, so the refusal is exercised for real.
+it("the pinned submodule ships joint plans to refuse", () => {
+  expect(jointDocumentFiles.length).toBeGreaterThan(0);
+});
+for (const [dir, name] of [...jointDocumentFiles, ...jointInputDocumentFiles])
+  it(`refuses the joint plan ${name}, naming why`, () => {
+    let caught: unknown;
+    try {
+      readExecutionDocumentText(read(dir, name));
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnsupportedError);
+    expect((caught as UnsupportedError).findings.length).toBeGreaterThan(0);
+    expect((caught as UnsupportedError).message).toMatch(/§6\.11/);
   });
 
 for (const [dir, name] of documents) describe(name, () => {
@@ -73,13 +99,14 @@ for (const [dir, name] of documents) describe(name, () => {
     }
   });
 
-  it("transports carry an arc, and a transporter unless the move is same-spot (§6.4)", () => {
+  it("transports carry an arc, and no transporter on a same-spot move (§6.4)", () => {
+    // A real move names its transporter or says `null` for a route that needs
+    // none; the reader refuses one that omits the key, so reading is the check.
     for (const a of doc.activities) {
       if (a.kind !== "transport") continue;
       expect(a.arc.from.port).not.toBe("");
       expect(a.arc.to.port).not.toBe("");
       if (a.fromSpot === a.toSpot) expect(a.transporter).toBeUndefined();
-      else expect(a.transporter).toBeDefined();
     }
   });
 

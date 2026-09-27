@@ -56,12 +56,17 @@ export interface ProcessingActivity extends ActivityBase {
   readonly inputSpots?: Readonly<Record<string, SpotRef>>;
   readonly outputSpots?: Readonly<Record<string, SpotRef>>;
   readonly consumption?: Readonly<Record<ResourceRef, number>>;
+  /**
+   * §6.3 echo of the mode's `device_access`, written only where it is false:
+   * the material rests on its spots and the device is free meanwhile (§4.4.2).
+   */
+  readonly deviceAccess?: false;
 }
 
 /**
- * §6.4. `transporter` is absent for a same-spot move, which is a physical
- * no-op no transporter performs — the spec calls the field required and then
- * states that exception, so the type has to allow it.
+ * §6.4. `transporter` is absent on a move no transporter performs: a
+ * same-spot move (a no-op, the key omitted) or a route that needs none (§4.6,
+ * written as `null`). Both still occupy the devices at either end.
  */
 export interface TransportActivity extends ActivityBase {
   readonly kind: "transport";
@@ -113,5 +118,7 @@ export interface ExecutionDocument {
   readonly outcome?: Outcome;
   readonly objective?: Objective;
   readonly activities: readonly Activity[];
+  /** §6.12. Spots a stopped job left held; the plan may not use them. */
+  readonly occupied?: readonly { readonly spot: SpotRef; readonly since: number }[];
   readonly meta?: { readonly workflow?: string; readonly environment?: string };
 }

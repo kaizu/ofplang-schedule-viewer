@@ -6,7 +6,7 @@
  * in, and two layout bugs shipped because of it.
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { test, type Page } from "@playwright/test";
@@ -82,6 +82,33 @@ test("a replan, and a selection", async ({ page }) => {
   await page.locator(`#views button[data-view="flow"]`).click();
   await page.locator("#plot rect.bar.transport").first().click();
   await shot(page, "selection.multi-leg");
+});
+
+test("a step resting on a device that stays free (§4.4.2)", async ({ page }) => {
+  await page.goto("/?doc=storage");
+  await settle(page);
+  for (const theme of ["light", "dark"]) {
+    await page.locator("#theme").selectOption(theme);
+    await shot(page, `storage.device.${theme}`);
+  }
+  await page.locator("#plot rect.bar.resting").first().click();
+  await shot(page, "storage.selected");
+});
+
+test("a joint plan, dropped, and refused with its reason (D42)", async ({ page }) => {
+  await page.goto("/?doc=plate_batch");
+  await settle(page);
+  const text = readFileSync(
+    fileURLToPath(new URL("../../../external/ofplang-schedule/examples/outputs/shared_bay.plan.yaml", import.meta.url)),
+    "utf8",
+  );
+  await page.evaluate((yaml) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([yaml], "shared_bay.plan.yaml"));
+    window.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, text);
+  await page.locator("#banner:not([hidden])").waitFor();
+  await shot(page, "gate.joint-plan");
 });
 
 test("the feature gate, refusing something it cannot draw", async ({ page }) => {

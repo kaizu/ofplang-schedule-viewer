@@ -16,7 +16,7 @@ import {
   visibleFor,
   type GraphNode,
 } from "./model/graph";
-import { activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
+import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import { copyShareLink, el, escapeHtml, placeTip, wireGraphPointer, wireSplitter } from "./interactions";
 import type { ExecutionDocument } from "./model/document";
 import type { Environment } from "./model/environment";
@@ -32,6 +32,8 @@ import {
   readWorkflow,
   readWorkflowText,
   ReadError,
+  UnsupportedError,
+  type Finding,
   type GateReport,
 } from "./read";
 import { downloadSvg, ganttToSvg } from "./view/export";
@@ -75,6 +77,8 @@ interface State {
   blurb: string;
   source: string;
   gate?: GateReport;
+  /** Why a plan that was given is not drawn (D42) — absent when it was, or when none was given. */
+  refused?: readonly Finding[];
   view: GanttView;
   zoom: number;
   graphZoom: number;
@@ -265,11 +269,12 @@ function adopt(
   // A workflow stands on its own — it can be read before anything has been
   // scheduled from it, and that is when the feature gate is most useful. Only
   // the plan pane needs a plan.
-  const doc = raw.plan ? readExecutionDocument(raw.plan) : undefined;
+  const { doc, refused } = readPlan(raw.plan);
   const env = raw.environment ? readEnvironment(raw.environment) : undefined;
   const workflow = raw.workflow ? readWorkflow(raw.workflow) : undefined;
 
   state.gate = raw.workflow ? gateWorkflow(raw.workflow) : undefined;
+  state.refused = refused;
   state.blurb = blurb;
   state.source = source;
   state.selected = undefined;
@@ -279,6 +284,20 @@ function adopt(
   state.scene = doc ? buildScene(doc, env, workflow) : undefined;
   state.graph = workflow ? buildGraph(workflow) : undefined;
   state.raw = raw;
+}
+
+/**
+ * A plan the viewer refuses is still a plan: it is answered with the reason,
+ * not with "this is not a plan", and not with a crash.
+ */
+function readPlan(raw: unknown): { doc?: ExecutionDocument; refused?: readonly Finding[] } {
+  if (!raw) return {};
+  try {
+    return { doc: readExecutionDocument(raw) };
+  } catch (e) {
+    if (e instanceof UnsupportedError) return { refused: e.findings };
+    throw e;
+  }
 }
 
 /* ── rendering ─────────────────────────────────────────────────────────── */
@@ -375,8 +394,10 @@ function renderLegend(): void {
   }
   const counts = scene.metrics.counts;
   const held = scene.activities.some((a) => a.kind === "transport" && a.transporter);
+  const resting = scene.activities.some((a) => a.kind === "processing" && !accessesDevices(a, scene.env));
   const items: [boolean, string, string][] = [
     [counts.processing > 0, "processing", "processing"],
+    [resting, "resting", "resting (device free)"],
     [counts.transport > 0, "transport", "transport"],
     [held, "held", "device held"],
     [counts.relay > 0, "relay", "relay"],
@@ -392,6 +413,11 @@ function renderChart(): void {
   const scene = state.scene;
   el("plan-empty").hidden = !!scene;
   el("chart").hidden = !scene;
+  el("plan-empty-title").textContent = state.refused ? "Plan not drawn." : "No plan loaded.";
+  el("plan-empty-why").innerHTML = state.refused
+    ? "A plan was given, but it is one this viewer does not draw — the banner above says why."
+    : "This workflow has not been scheduled yet. Run <code>ofp-schedule schedule</code> on it and " +
+      "drop the plan here to see when each step runs.";
   for (const id of ["labels", "zoom-in", "zoom-out", "zoom-fit", "export"])
     el<HTMLButtonElement>(id).disabled = !scene;
   for (const b of el("views").querySelectorAll("button")) (b as HTMLButtonElement).disabled = !scene;
@@ -429,16 +455,26 @@ function renderChart(): void {
   plot.innerHTML = g.plot;
 }
 
+const findingLine = (f: Finding): string =>
+  `${escapeHtml(f.what)} at <code>${escapeHtml(f.at)}</code> — ${escapeHtml(f.why)}`;
+
 function renderBanner(): void {
   const gate = state.gate;
-  if (!gate || gate.supported) {
+  const workflowGated = !!gate && !gate.supported;
+  if (state.refused) {
+    // Every mark of a joint plan has the same reason, so it is said once, in
+    // the headline, and the list only says where each mark was found.
+    showBanner(`This plan was not drawn: ${state.refused[0]!.why}.`, [
+      ...state.refused.map((f) => `${escapeHtml(f.what)} at <code>${escapeHtml(f.at)}</code>`),
+      ...(workflowGated ? gate.findings.map(findingLine) : []),
+    ]);
+    return;
+  }
+  if (!workflowGated) {
     hideBanner();
     return;
   }
-  showBanner(
-    gateSummary(gate),
-    gate.findings.map((f) => `${escapeHtml(f.what)} at <code>${escapeHtml(f.at)}</code> — ${escapeHtml(f.why)}`),
-  );
+  showBanner(gateSummary(gate), gate.findings.map(findingLine));
 }
 
 function showBanner(headline: string, details: readonly string[]): void {
@@ -690,6 +726,7 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
   let env: Environment | undefined;
   let workflow: Workflow | undefined;
   let gate: GateReport | undefined;
+  let refused: readonly Finding[] | undefined;
   let rawPlan: unknown = null;
   let rawWorkflow: unknown = null;
   let rawEnvironment: unknown = null;
@@ -704,8 +741,14 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
       accepted.push(`${file.name} → plan`);
       state.selected = undefined;
       continue;
-    } catch {
-      /* not a plan; try the next shape */
+    } catch (e) {
+      // A plan this viewer refuses is recognised as a plan, not tried as the next shape.
+      if (e instanceof UnsupportedError) {
+        refused = e.findings;
+        doc = undefined;
+        accepted.push(`${file.name} → plan (not drawn)`);
+        continue;
+      }
     }
     try {
       workflow = readWorkflowText(text);
@@ -727,7 +770,7 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
     }
   }
 
-  if (!doc && !workflow) {
+  if (!doc && !workflow && !refused) {
     showBanner("Nothing to draw yet.", [
       ...rejected.map(escapeHtml),
       "Drop a workflow to read it, or a plan to see when its steps run — " +
@@ -737,6 +780,7 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
   }
 
   state.gate = gate;
+  state.refused = doc ? undefined : refused;
   state.selected = undefined;
   state.blurb = accepted.join(", ");
   state.source = files.map((f) => f.name).join("  ·  ");

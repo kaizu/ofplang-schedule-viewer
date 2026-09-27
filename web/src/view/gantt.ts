@@ -163,8 +163,11 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
     const baseline = y + BAR_H - 3.5;
     const indent = bar.style === "replenishment" ? 15 : 5;
     const inside = fit(bar.label, w - indent - 4);
+    // A resting bar is hollow, so its caption takes the ink colour, not the on-fill one.
     if (inside)
-      plot.push(`<text class="bar-tx" x="${x0 + indent}" y="${baseline}">${esc(inside)}</text>`);
+      plot.push(
+        `<text class="bar-tx${bar.style === "resting" ? " on-rest" : ""}" x="${x0 + indent}" y="${baseline}">${esc(inside)}</text>`,
+      );
     else {
       const gap = nextStartOn(bar.lane, x0) - x1 - 9;
       const outside = fit(bar.label, gap);

@@ -2,7 +2,7 @@
 
 import { arcKey, pathKey } from "../model/common";
 import { findNode, type GraphNode } from "../model/graph";
-import { activitiesUnder } from "../model/scene";
+import { accessesDevices, activitiesUnder } from "../model/scene";
 import type { Activity } from "../model/document";
 import type { Scene } from "../model/scene";
 import { formatDuration, unitAbbrev } from "../layout/scale";
@@ -75,7 +75,8 @@ function overview(scene: Scene, blurb: string): string {
         "Occupancy",
         `<div class="util">${bars}</div>` +
           `<div class="note" style="margin-top:8px">Share of the run each machine is held. A move holds its ` +
-          `transporter and the devices at both ends, so those count too.</div>`,
+          `transporter and the devices at both ends, so those count too; material merely resting on a ` +
+          `device does not.</div>`,
       ),
     );
   }
@@ -87,6 +88,17 @@ function overview(scene: Scene, blurb: string): string {
     ];
     if (rows.length)
       out.push(block("Boundary", dl(rows) + `<div class="note" style="margin-top:8px">Where the workflow's own material starts and ends up.</div>`));
+  }
+
+  if (doc.occupied?.length) {
+    out.push(
+      block(
+        "Occupied",
+        dl(doc.occupied.map((o) => [o.spot, `since ${formatDuration(o.since, unit)}`] as const)) +
+          `<div class="note" style="margin-top:8px">Spots a stopped job left held. The plan may not use them; ` +
+          `what is on them is not said (§6.12).</div>`,
+      ),
+    );
   }
 
   if (scene.resources.length) {
@@ -142,6 +154,7 @@ function detail(scene: Scene, index: number): string {
         ["node", pathKey(a.node)],
       ];
       if (a.devices?.length) rows.push(["devices", a.devices.join(", ")]);
+      if (!accessesDevices(a, scene.env)) rows.push(["device access", "none — the material rests there (§4.4.2)"]);
       for (const [p, s] of Object.entries(a.inputSpots ?? {})) rows.push([`in · ${p}`, s]);
       for (const [p, s] of Object.entries(a.outputSpots ?? {})) rows.push([`out · ${p}`, s]);
       for (const [r, n] of Object.entries(a.consumption ?? {})) rows.push([`uses · ${r}`, n]);
@@ -155,8 +168,8 @@ function detail(scene: Scene, index: number): string {
           dl([
             ["from", a.fromSpot],
             ["to", a.toSpot],
-            // §6.4: omitted for a same-spot move, which no transporter performs.
-            ["transporter", a.transporter ?? "— (same spot, a no-op)"],
+            // §6.4: omitted for a same-spot move, null on a route that needs none.
+            ["transporter", a.transporter ?? (a.fromSpot === a.toSpot ? "— (same spot, a no-op)" : "— (none needed on this route)")],
             ...(a.seq !== undefined ? ([["leg", a.seq]] as const) : []),
           ]),
         ),
@@ -206,9 +219,14 @@ export function tooltipFor(scene: Scene, index: number): string {
   const unit = unitAbbrev(scene.unit);
   const lines: string[] = [`${a.start} – ${a.end} ${unit}  (${a.end - a.start})`];
   if (a.kind === "processing")
-    lines.push(`${a.process} · mode ${a.mode}${a.devices?.length ? ` · ${a.devices.join(", ")}` : ""}`);
+    lines.push(
+      `${a.process} · mode ${a.mode}${a.devices?.length ? ` · ${a.devices.join(", ")}` : ""}` +
+        (accessesDevices(a, scene.env) ? "" : " · resting"),
+    );
   if (a.kind === "transport")
-    lines.push(`${a.fromSpot} → ${a.toSpot}${a.transporter ? ` · ${a.transporter}` : " · same spot"}`);
+    lines.push(
+      `${a.fromSpot} → ${a.toSpot}${a.transporter ? ` · ${a.transporter}` : a.fromSpot === a.toSpot ? " · same spot" : " · no transporter"}`,
+    );
   if (a.kind === "relay") lines.push(`waiting at ${a.spot}`);
   if (a.kind === "replenishment") lines.push(`${a.device} · ${a.replenisher}`);
   if (a.status !== "pending") lines.push(`status: ${a.status}`);

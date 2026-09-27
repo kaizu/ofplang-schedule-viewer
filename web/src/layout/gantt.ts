@@ -17,9 +17,9 @@
  * Pure functions over the scene: no DOM, no colours, no pixels.
  */
 
-import { deviceOf } from "../model/common";
+import { deviceOf, spotNameOf } from "../model/common";
 import type { Activity } from "../model/document";
-import { holdingDevices, type Scene } from "../model/scene";
+import { accessesDevices, holdingDevices, type Scene } from "../model/scene";
 
 export type GanttView = "device" | "flow" | "activity";
 
@@ -29,7 +29,8 @@ export const GANTT_VIEWS: readonly { id: GanttView; label: string; hint: string 
   { id: "activity", label: "Activity", hint: "one lane per activity — shows the sequence" },
 ];
 
-export type BarStyle = "processing" | "transport" | "held" | "relay" | "replenishment";
+/** `resting` is a step that holds its spots but not its device (§4.4.2). */
+export type BarStyle = "processing" | "resting" | "transport" | "held" | "relay" | "replenishment";
 
 export interface Lane {
   readonly id: string;
@@ -97,28 +98,37 @@ function barLabel(a: Activity): string {
 const NO_MACHINE = "(no device)";
 
 function deviceLayout(scene: Scene): GanttLayout {
-  const lanes: Lane[] = scene.machines.map((m) => ({
-    id: m.id,
-    label: m.id,
-    tag: m.kind === "device" ? "" : m.kind,
-  }));
-  lanes.push({ id: NO_MACHINE, label: NO_MACHINE, tag: "" });
-  const laneOf = new Map(lanes.map((l, i) => [l.id, i]));
-  const bars: Bar[] = [];
+  // Bars are filed by lane id first and numbered at the end, because spot
+  // lanes are only known once the activities have been read.
+  const filed: (Omit<Bar, "lane"> & { laneId: string })[] = [];
+  /** device id → the spot lanes that sit under it, in order of first use. */
+  const spotLanes = new Map<string, string[]>();
 
   scene.activities.forEach((a, index) => {
     const at = (id: string | undefined, style: BarStyle, label: string): void => {
-      if (!id) return;
-      const lane = laneOf.get(id);
-      if (lane === undefined) return;
-      bars.push({ lane, index, start: a.start, end: a.end, style, label });
+      if (id) filed.push({ laneId: id, index, start: a.start, end: a.end, style, label });
     };
 
     switch (a.kind) {
       case "processing": {
+        const style = styleOf(a, scene);
+        if (style === "resting") {
+          // A resting step holds spots, not a device (§4.4.2), and two of them
+          // may share one device at the same time — a fridge with two slots.
+          // On the device's own lane they would overlap, so each goes on the
+          // lane of the spot it holds, directly under its device.
+          for (const spot of heldSpots(a, scene)) {
+            const device = deviceOf(spot);
+            const list = spotLanes.get(device) ?? [];
+            if (!list.includes(spot)) list.push(spot);
+            spotLanes.set(device, list);
+            at(spot, style, barLabel(a));
+          }
+          break;
+        }
         const held = holdingDevices(a, scene.env);
-        if (held.length) for (const d of held) at(d, "processing", barLabel(a));
-        else at(NO_MACHINE, "processing", barLabel(a));
+        if (held.length) for (const d of held) at(d, style, barLabel(a));
+        else at(NO_MACHINE, style, barLabel(a));
         break;
       }
       case "transport": {
@@ -129,9 +139,14 @@ function deviceLayout(scene: Scene): GanttLayout {
           // Held, not moving: the endpoints are blocked for the duration (§4.5).
           at(from, "held", "");
           if (to !== from) at(to, "held", "");
-        } else {
+        } else if (a.fromSpot === a.toSpot) {
           // A same-spot move is a no-op no transporter performs (§6.4).
           at(from, "transport", "");
+        } else {
+          // A route that needs no transporter is performed by the devices
+          // themselves — both are occupied, nothing else is (§4.6).
+          at(from, "transport", barLabel(a));
+          if (to !== from) at(to, "transport", "");
         }
         break;
       }
@@ -145,17 +160,38 @@ function deviceLayout(scene: Scene): GanttLayout {
     }
   });
 
-  // Drop machines nothing touches — an environment often declares more than a
-  // given plan uses, and empty lanes are just noise.
-  const used = new Set(bars.map((b) => b.lane));
-  if (used.size === lanes.length) return { lanes, bars };
+  // Machines in the scene's order, each followed by its spot lanes. A machine
+  // nothing touches is dropped — an environment often declares more than a
+  // given plan uses, and empty lanes are just noise — but one whose spots are
+  // used keeps its row, so the spot lanes stay under the name they belong to.
+  const used = new Set(filed.map((b) => b.laneId));
+  const lanes: Lane[] = [];
+  const machineIds = [...scene.machines.map((m) => m.id)];
+  for (const device of spotLanes.keys()) if (!machineIds.includes(device)) machineIds.push(device);
+  for (const id of machineIds) {
+    const spots = spotLanes.get(id) ?? [];
+    if (!used.has(id) && !spots.length) continue;
+    const kind = scene.machines.find((m) => m.id === id)?.kind ?? "device";
+    lanes.push({ id, label: id, tag: kind === "device" ? "" : kind });
+    for (const spot of spots) lanes.push({ id: spot, label: `· ${spotNameOf(spot)}`, tag: "spot" });
+  }
+  if (used.has(NO_MACHINE)) lanes.push({ id: NO_MACHINE, label: NO_MACHINE, tag: "" });
 
-  const keep = lanes.map((_, i) => i).filter((i) => used.has(i));
-  const remap = new Map(keep.map((old, next) => [old, next]));
-  return {
-    lanes: keep.map((i) => lanes[i]!),
-    bars: bars.map((b) => ({ ...b, lane: remap.get(b.lane)! })),
-  };
+  const laneOf = new Map(lanes.map((l, i) => [l.id, i]));
+  const bars: Bar[] = [];
+  for (const { laneId, ...bar } of filed) {
+    const lane = laneOf.get(laneId);
+    if (lane !== undefined) bars.push({ ...bar, lane });
+  }
+  return { lanes, bars };
+}
+
+/** The spots a processing step binds: its echo, or else its mode's (§6.3). */
+function heldSpots(a: Activity & { kind: "processing" }, scene: Scene): string[] {
+  const echo = [...Object.values(a.inputSpots ?? {}), ...Object.values(a.outputSpots ?? {})];
+  if (echo.length) return [...new Set(echo)];
+  const mode = scene.env?.processes[a.process]?.modes.find((m) => m.id === a.mode);
+  return [...new Set([...Object.values(mode?.inputSpots ?? {}), ...Object.values(mode?.outputSpots ?? {})])];
 }
 
 /** The top-level node an activity belongs to; moves are filed under their source. */
@@ -181,7 +217,7 @@ function flowLayout(scene: Scene): GanttLayout {
       index,
       start: a.start,
       end: a.end,
-      style: styleOf(a),
+      style: styleOf(a, scene),
       label: barLabel(a),
     })),
   };
@@ -199,7 +235,7 @@ function activityLayout(scene: Scene): GanttLayout {
       index,
       start: a.start,
       end: a.end,
-      style: styleOf(a),
+      style: styleOf(a, scene),
       label: "",
     })),
   };
@@ -213,10 +249,10 @@ const KIND_TAG: Readonly<Record<Activity["kind"], string>> = {
   replenishment: "refill",
 };
 
-function styleOf(a: Activity): BarStyle {
+function styleOf(a: Activity, scene: Scene): BarStyle {
   switch (a.kind) {
     case "processing":
-      return "processing";
+      return accessesDevices(a, scene.env) ? "processing" : "resting";
     case "transport":
       return "transport";
     case "relay":

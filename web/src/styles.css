@@ -465,6 +465,11 @@ main {
 .sw.processing {
   background: var(--processing);
 }
+.sw.resting {
+  box-sizing: border-box;
+  border: 1.5px solid var(--processing);
+  background: color-mix(in srgb, var(--processing) 12%, transparent);
+}
 .sw.transport {
   background: var(--transport);
 }
@@ -598,6 +603,18 @@ svg {
 }
 .bar.processing {
   fill: var(--processing);
+}
+/* Material resting on a device that is free meanwhile (§4.4.2): the same hue
+   as the work, hollow rather than filled — the step is real, the device is
+   not taken. Hollow is the non-colour cue, so it reads in any palette. */
+.bar.resting {
+  fill: var(--processing);
+  fill-opacity: 0.12;
+  stroke: var(--processing);
+  stroke-width: 1.5;
+}
+.bar-tx.on-rest {
+  fill: var(--ink-2);
 }
 .bar.transport {
   fill: var(--transport);

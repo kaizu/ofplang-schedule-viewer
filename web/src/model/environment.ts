@@ -12,7 +12,8 @@ export interface Device {
 
 /** §5.4. A missing (transporter, from, to) entry means the move is impossible. */
 export interface Transport {
-  readonly transporter: TransporterId;
+  /** `null` is a route nothing carries — a device shifting between its own spots (§4.6). */
+  readonly transporter: TransporterId | null;
   readonly from: SpotRef;
   readonly to: SpotRef;
   readonly duration: number;
@@ -28,6 +29,8 @@ export interface Mode {
   readonly inputSpots: Readonly<Record<string, SpotRef>>;
   readonly outputSpots: Readonly<Record<string, SpotRef>>;
   readonly consumption?: Readonly<Record<ResourceRef, number>>;
+  /** §5.5. False: the mode holds its spots but occupies no device (§4.4.2). */
+  readonly deviceAccess?: false;
 }
 
 /** §5. Keyed by atomic process definition name; capability is per definition. */

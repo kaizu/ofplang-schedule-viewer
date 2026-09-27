@@ -8,7 +8,9 @@
  *
  * The spec's exceptions are the parts worth reading twice — they are what a
  * naive reader gets wrong:
- *   - `transporter` is absent on a same-spot move (§6.4).
+ *   - `transporter` is absent on a same-spot move, and `null` on a route that
+ *     needs none (§6.4). A real move with the key missing is malformed.
+ *   - A joint plan (`jobs`, §6.11) is refused before anything is read (D42).
  *   - Every leg of a multi-hop move carries the *same* logical `arc`; the legs
  *     differ by `seq` and by their physical spots (§6.4).
  *   - A stay-put relay is folded out of the output; its absence is normal (§6.4.1).
@@ -37,6 +39,7 @@ import {
   at,
   numberMap,
   oneOf,
+  optBoolean,
   optList,
   optNumber,
   optRecord,
@@ -50,6 +53,7 @@ import {
   stringList,
   stringMap,
 } from "./coerce";
+import { gateDocument, UnsupportedError } from "./gate";
 
 const OUTCOMES = ["optimal", "feasible", "infeasible", "unknown"] as const;
 const STATUSES = ["pending", "running", "completed", "failed", "cancelled"] as const;
@@ -69,6 +73,8 @@ export function readExecutionDocumentText(text: string): ExecutionDocument {
 /** Read an already-parsed document (a plan or a status). */
 export function readExecutionDocument(raw: unknown): ExecutionDocument {
   const doc = reqRecord(raw, "");
+  const refused = gateDocument(doc);
+  if (refused.length) throw new UnsupportedError(refused);
 
   const time = optRecord(doc["time"], "time");
   const iface = optRecord(doc["interface"], "interface");
@@ -92,6 +98,15 @@ export function readExecutionDocument(raw: unknown): ExecutionDocument {
   if (doc["outcome"] !== undefined && doc["outcome"] !== null)
     out.outcome = oneOf<Outcome>(doc["outcome"], "outcome", OUTCOMES);
   if (obj) out.objective = readObjective(obj);
+  const occupied = optList(doc["occupied"], "occupied");
+  if (occupied)
+    out.occupied = occupied.map((o, i) => {
+      const e = reqRecord(o, at("occupied", i));
+      return {
+        spot: reqString(e["spot"], at(at("occupied", i), "spot")),
+        since: reqNumber(e["since"], at(at("occupied", i), "since")),
+      };
+    });
   if (meta) {
     const wf = optString(meta["workflow"], "meta.workflow");
     const env = optString(meta["environment"], "meta.environment");
@@ -191,6 +206,7 @@ function readProcessing(
   if (outS) out.outputSpots = stringMap(outS, at(path, "output_spots"));
   const cons = optRecord(a["consumption"], at(path, "consumption"));
   if (cons) out.consumption = numberMap(cons, at(path, "consumption"));
+  if (optBoolean(a["device_access"], at(path, "device_access")) === false) out.deviceAccess = false;
   return out;
 }
 
@@ -203,12 +219,13 @@ function readTransport(
   const toSpot = reqString(a["to_spot"], at(path, "to_spot"));
   const transporter = optString(a["transporter"], at(path, "transporter"));
 
-  // §6.4: `transporter` is required except on a same-spot move, which no
-  // transporter performs. Anything else missing it is a malformed document.
-  if (transporter === undefined && fromSpot !== toSpot)
+  // §6.4: the key is required except on a same-spot move, which no transporter
+  // performs. A real move that needs none says so with `null`; one missing the
+  // key is a malformed document, not the same statement.
+  if (!("transporter" in a) && fromSpot !== toSpot)
     throw new ReadError(
       path,
-      `a transport between different spots needs a transporter (${fromSpot} -> ${toSpot}, §6.4)`,
+      `a transport between different spots names its transporter, or null for none (${fromSpot} -> ${toSpot}, §6.4)`,
     );
 
   const out: { -readonly [K in keyof TransportActivity]: TransportActivity[K] } = {

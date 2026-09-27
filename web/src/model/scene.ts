@@ -71,7 +71,7 @@ export interface Scene {
   readonly byNode: ReadonlyMap<string, readonly number[]>;
   /** logical arc → indices of its legs and junctions, in travel order. */
   readonly byArc: ReadonlyMap<string, readonly number[]>;
-  /** machine id → indices of everything that holds it. */
+  /** machine id → indices of everything that holds it, or rests on it (§4.4.2). */
   readonly byMachine: ReadonlyMap<string, readonly number[]>;
 
   readonly machines: readonly Machine[];
@@ -110,7 +110,11 @@ export function buildScene(
     switch (a.kind) {
       case "processing":
         push(byNode, pathKey(a.node), i);
-        for (const d of holdingDevices(a, env)) hold(d, i, a);
+        // A step that only rests on its devices is still *on* them, so it is
+        // indexed there, but it holds none of them (§4.4.2).
+        for (const d of holdingDevices(a, env))
+          if (accessesDevices(a, env)) hold(d, i, a);
+          else push(byMachine, d, i);
         break;
       case "transport":
         push(byArc, arcKey(a.arc), i);
@@ -300,6 +304,17 @@ export function holdingDevices(a: ProcessingActivity, env?: Environment): string
 
   const spots = [...Object.values(a.inputSpots ?? {}), ...Object.values(a.outputSpots ?? {})];
   return [...new Set(spots.map(deviceOf))];
+}
+
+/**
+ * Whether a step accesses the devices it names, or merely rests material on
+ * their spots (§4.4.2). The echo is written only where it is false (§6.3), so
+ * its absence falls back to the environment's mode, and then to the default.
+ */
+export function accessesDevices(a: ProcessingActivity, env?: Environment): boolean {
+  if (a.deviceAccess === false) return false;
+  const mode = env?.processes[a.process]?.modes.find((m) => m.id === a.mode);
+  return mode?.deviceAccess !== false;
 }
 
 /** Every activity at or below a node — a collapsed composite stands for all of

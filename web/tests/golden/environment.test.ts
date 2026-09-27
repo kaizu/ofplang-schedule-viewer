@@ -34,7 +34,9 @@ for (const [dir, name] of environmentFiles)
 
     it("the transport table names declared transporters and declared spots (§5.4)", () => {
       for (const t of env.transports) {
-        expect(transporterIds, `transporter ${t.transporter}`).toContain(t.transporter);
+        // `null` is a route nothing carries (§5.4); anything else is a declared transporter.
+        if (t.transporter !== null)
+          expect(transporterIds, `transporter ${t.transporter}`).toContain(t.transporter);
         expect(spots, `from ${t.from}`).toContain(t.from);
         expect(spots, `to ${t.to}`).toContain(t.to);
         expect(t.duration).toBeGreaterThanOrEqual(0);
@@ -80,3 +82,16 @@ for (const [dir, name] of environmentFiles)
           }
     });
   });
+
+it("reads a route no transporter performs as null, and refuses one that omits the key (§5.4)", () => {
+  const env = (line: string) => `
+devices:
+  - { id: hotel, spots: [a, b] }
+transporters: []
+transports:
+  - { ${line}from: hotel.a, to: hotel.b, duration: 3 }
+processes: {}
+`;
+  expect(readEnvironmentText(env("transporter: null, ")).transports[0]!.transporter).toBeNull();
+  expect(() => readEnvironmentText(env(""))).toThrow(/write null/);
+});

@@ -33,7 +33,17 @@ const BLURBS = {
   reroute: "The planned transporter is gone, so the rest of the move is replanned around it.",
   reroute_chain: "A move that takes two hops, with the plate waiting at a relay in between.",
   reroute_stay: "A re-route where the plate stays put, so the relay folds out of the plan.",
+  storage: "A plate resting in storage: its spot is held, the device stays free for other work.",
 };
+
+/** A joint plan (§6.11) is refused by the viewer (design.md D42), so it is not
+ *  offered in the list either — the same test the reader applies. */
+const isJoint = (plan) =>
+  plan?.jobs != null ||
+  Array.isArray(plan?.meta?.workflow) ||
+  (plan?.activities ?? []).some((a) => a && a.job !== undefined);
+
+const skipped = [];
 
 const prettify = (id) =>
   id.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
@@ -68,13 +78,17 @@ function collectFrom(dir, origin, roots) {
       .map((f) => join(d, f)),
   );
 
-  return planFiles.map((planPath) => {
+  return planFiles.flatMap((planPath) => {
     const file = basename(planPath);
     const replan = file.endsWith(".replan.yaml");
     const name = file.replace(/\.(re)?plan\.yaml$/, "");
     const id = replan ? `${name}_replan` : name;
 
     const plan = readYaml(planPath);
+    if (isJoint(plan)) {
+      skipped.push(file);
+      return [];
+    }
 
     const fromMeta = (rel) => {
       if (typeof rel !== "string" || !rel) return undefined;
@@ -103,7 +117,7 @@ function collectFrom(dir, origin, roots) {
       workflow: workflowPath ? readYaml(workflowPath) : null,
       environment: envPath ? readYaml(envPath) : null,
     };
-    return dataset;
+    return [dataset];
   });
 }
 
@@ -141,5 +155,6 @@ writeFileSync(join(OUT, "index.json"), JSON.stringify(index, null, 2));
 
 console.log(
   `collect-datasets: ${index.length} datasets -> public/datasets/\n` +
-    index.map((d) => `  ${d.id.padEnd(20)} ${String(d.activities).padStart(3)} activities`).join("\n"),
+    index.map((d) => `  ${d.id.padEnd(20)} ${String(d.activities).padStart(3)} activities`).join("\n") +
+    (skipped.length ? `\n  skipped (joint plans, D42): ${skipped.join(", ")}` : ""),
 );

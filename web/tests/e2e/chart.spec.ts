@@ -237,7 +237,13 @@ test.describe("the workflow graph", () => {
 test.describe("the two panes are linked", () => {
   test("picking a bar lights the box it came from, however deep it is", async ({ page }) => {
     await open(page, "plate_batch");
-    await page.locator("#plot rect.bar.processing").nth(6).click();
+    // Picked by node path, not by position: a new pin reorders the plan.
+    const i = await page.evaluate(async () => {
+      const d = await (await fetch("datasets/plate_batch.json")).json();
+      return (d.plan.activities as { node?: string[] }[]).findIndex((a) => a.node?.join(".") === "b2.rep1.thermal");
+    });
+    expect(i).toBeGreaterThanOrEqual(0);
+    await page.locator(`#plot rect.bar.processing[data-i="${i}"]`).first().click();
 
     // The step is at b2/rep1/thermal; with b2 closed, b2 is what stands for it.
     await expect(page.locator("#graph g.gnode.lit")).toHaveCount(1);

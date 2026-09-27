@@ -14,6 +14,7 @@ import type { Device, Environment, Mode, Transport } from "../model/environment"
 import {
   at,
   numberMap,
+  optBoolean,
   optList,
   optRecord,
   ReadError,
@@ -103,8 +104,12 @@ function readDevice(raw: unknown, path: string): Device {
 
 function readTransport(raw: unknown, path: string): Transport {
   const t = reqRecord(raw, path);
+  // §5.4: the key is required and `null` is a value — it is how a route says
+  // nothing carries it. A missing key is not the same statement.
+  if (!("transporter" in t))
+    throw new ReadError(at(path, "transporter"), "required; write null for a route no transporter performs (§5.4)");
   return {
-    transporter: reqString(t["transporter"], at(path, "transporter")),
+    transporter: t["transporter"] === null ? null : reqString(t["transporter"], at(path, "transporter")),
     from: reqString(t["from"], at(path, "from")),
     to: reqString(t["to"], at(path, "to")),
     duration: reqNumber(t["duration"], at(path, "duration")),
@@ -126,6 +131,7 @@ function readMode(raw: unknown, path: string, index: number): Mode {
   };
   const consumption = optRecord(m["consumption"], at(path, "consumption"));
   if (consumption) out.consumption = numberMap(consumption, at(path, "consumption"));
+  if (optBoolean(m["device_access"], at(path, "device_access")) === false) out.deviceAccess = false;
 
   // §5.5: a mode that occupies a device must have a positive duration; a
   // device-less Pure-Data-only mode may be instantaneous.

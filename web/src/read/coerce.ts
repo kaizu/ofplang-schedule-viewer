@@ -74,6 +74,12 @@ export function optList(v: unknown, path: string): unknown[] | undefined {
   return v === undefined || v === null ? undefined : reqList(v, path);
 }
 
+export function optBoolean(v: unknown, path: string): boolean | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "boolean") throw new ReadError(path, `expected true or false, got ${kindOf(v)}`);
+  return v;
+}
+
 export function stringList(v: unknown, path: string): string[] {
   return reqList(v, path).map((x, i) => reqString(x, at(path, i)));
 }
