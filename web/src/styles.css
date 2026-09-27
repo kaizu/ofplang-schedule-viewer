@@ -238,6 +238,18 @@ button[aria-disabled="true"]:hover {
   color: var(--ink);
   font-weight: 500;
 }
+/* After `.seg button`, which sets the colour with the same specificity as the
+   general rule above and so won: an unavailable view read exactly like the
+   others (seen in a screenshot of the Object view without a workflow). */
+.seg button[aria-disabled="true"],
+.seg button:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.seg button[aria-disabled="true"] {
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+}
 
 /* ── main ────────────────────────────────────────────────────────────── */
 main {
