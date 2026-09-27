@@ -55,8 +55,8 @@ ofp-export view <file>... [-o OUT] [--layout split|workflow|plan] [--gantt devic
   and nothing written — a joint plan (several workflows scheduled together as
   jobs), which this viewer does not draw.
 
-[`ofplang/export/SKILL.md`](ofplang/export/SKILL.md) says the same for an agent
-calling the command, and ships in the package.
+[`skills/ofp-export/SKILL.md`](skills/ofp-export/SKILL.md) says the same for an
+agent calling the command, as a skill to install where the agent looks for them.
 
 ## A single file
 

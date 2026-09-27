@@ -2,8 +2,8 @@
 # built, not tracked, so it is named here; the web sources it is built from are
 # not Python and stay out.
 include ofplang/export/_template/viewer.html
-include ofplang/export/SKILL.md
 prune web
 prune prototype
 prune external
 prune .github
+prune skills

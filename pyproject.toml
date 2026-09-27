@@ -56,7 +56,7 @@ namespaces = true
 # The viewer template is built from web/ (`npm run build:single`) and is not
 # committed; MANIFEST.in carries it into the sdist, this into the wheel.
 [tool.setuptools.package-data]
-"ofplang.export" = ["py.typed", "SKILL.md", "_template/viewer.html"]
+"ofplang.export" = ["py.typed", "_template/viewer.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
