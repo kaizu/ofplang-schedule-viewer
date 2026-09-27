@@ -507,3 +507,31 @@ describe("the graph lights the connections an Object runs along", () => {
     expect(lit(new Set(compositeKeys(graph)))).toBe(3);
   });
 });
+
+describe("an activity picked within an Object (D62)", () => {
+  it("stands out on the picked lane only, though the step is on two", () => {
+    const t = triples.find((x) => x.name === "reformatter")!;
+    const scene = buildScene(
+      readExecutionDocumentText(read(...t.plan)),
+      readEnvironmentText(read(...t.environment)),
+      readWorkflowText(read(...t.workflow)),
+    );
+    const tracing = traceObjects(scene);
+    if (!tracing.ok) throw new Error("reformatter does not trace");
+    const picked = tracing.traces.find((x) => x.where === "Reformatter12.rf12_out_a4")!;
+    const other = tracing.traces.find((x) => x.where === "Motoman7.motoman_out_a4")!;
+    const shared = picked.activities.find((i) => other.activities.includes(i))!;
+
+    const g = renderGantt(scene, {
+      view: "object",
+      baseWidth: 800,
+      zoom: 1,
+      showLabels: true,
+      lit: new Set(picked.activities),
+      litObject: picked.id,
+      focus: shared,
+    });
+    const focused = [...g.plot.matchAll(/<rect class="bar [^"]*\bfocus\b[^"]*" data-i="(\d+)" data-o="([^"]+)"/g)];
+    expect(focused.map(([, i, o]) => [Number(i), o])).toEqual([[shared, picked.id]]);
+  });
+});

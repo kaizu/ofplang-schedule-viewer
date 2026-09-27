@@ -103,8 +103,12 @@ const isLayout = (v: unknown): v is Layout => LAYOUTS.some((l) => l.id === v);
 /** What is picked, in whichever pane the person picked it. */
 type Selection =
   | { kind: "activity"; index: number }
-  /** An Object, picked in the Object view (design.md D58-2). */
-  | { kind: "object"; id: string }
+  /**
+   * An Object, picked in the Object view (design.md D58-2) — and, once it is
+   * picked, one of its activities within it (D62): the lane stays lit and
+   * the panel shows that activity.
+   */
+  | { kind: "object"; id: string; index?: number }
   | { kind: "node"; key: string }
   | ({ kind: "edge" } & EdgeRef);
 
@@ -518,8 +522,11 @@ function renderAll(): void {
   el("status-source").textContent = state.source;
 
   const trace = selectedTrace();
+  const focus = sel?.kind === "object" ? sel.index : undefined;
   el("status-selection").textContent =
-    trace
+    trace && scene && focus !== undefined
+      ? `${statusLine(scene, focus)} · in ${trace.label} (Esc: the whole Object)`
+      : trace
       ? `Selected Object · ${trace.label}`
       : sel?.kind === "edge"
       ? `Selected connection · ${edgeLabel(sel)}`
@@ -530,7 +537,9 @@ function renderAll(): void {
         : "Nothing selected — click a box";
 
   el("inspector").innerHTML =
-    trace && scene
+    trace && scene && focus !== undefined
+      ? renderInspector(scene, focus, state.blurb, trace)
+      : trace && scene
       ? renderObjectDetail(scene, trace)
       : sel?.kind === "edge"
       ? renderEdgeDetail(edgeLabel(sel), carriesLabel(sel), sel.object, scene, movesOn(sel))
@@ -693,6 +702,7 @@ function renderChart(): void {
     zoom: state.zoom,
     lit,
     ...(state.selected?.kind === "object" ? { litObject: state.selected.id } : {}),
+    ...(state.selected?.kind === "object" && state.selected.index !== undefined ? { focus: state.selected.index } : {}),
     showLabels: state.labels,
     availableHeight: el("body-row").clientHeight,
   });
@@ -961,7 +971,11 @@ function wireControls(): void {
   );
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") select(undefined);
+    if (e.key !== "Escape") return;
+    // Out one level: from an activity within an Object to the Object, then to nothing.
+    const sel = state.selected;
+    if (sel?.kind === "object" && sel.index !== undefined) select({ kind: "object", id: sel.id });
+    else select(undefined);
   });
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -977,7 +991,7 @@ function wireControls(): void {
 function same(a: Selection | undefined, b: Selection | undefined): boolean {
   if (!a || !b || a.kind !== b.kind) return false;
   if (a.kind === "activity") return a.index === (b as typeof a).index;
-  if (a.kind === "object") return a.id === (b as typeof a).id;
+  if (a.kind === "object") return a.id === (b as typeof a).id && a.index === (b as typeof a).index;
   if (a.kind === "node") return a.key === (b as typeof a).key;
   return edgeLabel(a) === edgeLabel(b as typeof a);
 }
@@ -999,7 +1013,16 @@ function wirePointer(): void {
     // on both lanes, and the lane clicked says which Object was meant (D58-2).
     const object = state.view === "object" ? (e.target as HTMLElement).closest<HTMLElement>("[data-o]") : null;
     if (object) {
-      select({ kind: "object", id: object.dataset["o"]! });
+      // Two steps (D62): a bar of a lane not yet picked picks its Object; a
+      // bar of the picked lane picks that activity within it. The same bar
+      // again steps back out to the Object. A wait is no activity.
+      const id = object.dataset["o"]!;
+      const i = object.dataset["i"];
+      const sel = state.selected;
+      const inPicked = sel?.kind === "object" && sel.id === id;
+      if (!inPicked || i === undefined) select({ kind: "object", id });
+      else if (sel.index === Number(i)) select({ kind: "object", id });
+      else select({ kind: "object", id, index: Number(i) });
       return;
     }
     const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i]");
@@ -1008,6 +1031,8 @@ function wirePointer(): void {
 
   el("gutter").addEventListener("click", (e) => {
     const lane = (e.target as HTMLElement).closest<HTMLElement>("[data-o]");
+    // The label always means the whole Object: from one of its activities it
+    // steps back out, and on the Object itself it puts it down (`select`).
     if (lane) select({ kind: "object", id: lane.dataset["o"]! });
   });
 

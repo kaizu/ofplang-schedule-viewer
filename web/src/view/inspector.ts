@@ -17,10 +17,18 @@ const dl = (rows: readonly (readonly [string, unknown])[]): string =>
 
 const block = (title: string, body: string): string => `<div><h3>${esc(title)}</h3>${body}</div>`;
 
-export function renderInspector(scene: Scene, selected: number | undefined, datasetBlurb: string): string {
-  return selected === undefined
-    ? overview(scene, datasetBlurb)
-    : detail(scene, selected);
+export function renderInspector(
+  scene: Scene,
+  selected: number | undefined,
+  datasetBlurb: string,
+  within?: ObjectTrace,
+): string {
+  if (selected === undefined) return overview(scene, datasetBlurb);
+  // An activity picked within an Object (D62) says which Object, and the way back.
+  const context = within
+    ? `<div class="note">Part of the life of <b>${esc(within.label)}</b> — Esc, or its lane's label, for the whole Object.</div>`
+    : "";
+  return context + detail(scene, selected);
 }
 
 function overview(scene: Scene, blurb: string): string {

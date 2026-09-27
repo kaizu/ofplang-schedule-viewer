@@ -50,6 +50,7 @@ function chartStyle(resolve: (token: string) => string): string {
     .bar.done { opacity: .55 }
     .bar.dim { opacity: .16 }
     .bar.lit { stroke: ${v("--ink")}; stroke-width: 2 }
+    .bar.focus { stroke-width: 3.5 }
     .bar-tx { fill: ${v("--on-data")}; font-family: "IBM Plex Mono",monospace; font-size: 9.5px }
     .bar-tx.outside { fill: ${v("--muted")} }
     .nowline { stroke: ${v("--now")}; stroke-width: 1.5; stroke-dasharray: 4 3 }

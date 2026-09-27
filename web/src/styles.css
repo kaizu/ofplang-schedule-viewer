@@ -714,6 +714,13 @@ svg {
   stroke: var(--ink);
   stroke-width: 2;
 }
+/* One activity picked within a lit Object (D62): the lane stays lit, and this
+   bar stands out from it by a heavier outline and a halo — not by colour, so
+   its kind still reads. */
+.bar.focus {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 3px var(--ink));
+}
 .held-ln {
   stroke: var(--transport);
   stroke-width: 2;

@@ -81,6 +81,9 @@ test("an Object picked, in both panes", async ({ page }) => {
   await page.locator('#views button[data-view="object"]').click();
   await page.locator('#gutter [data-o="create:PrepB.plate"]').click();
   await shot(page, "storage.object.picked");
+  // Then one of its activities, within it (D62).
+  await page.locator('#plot rect.bar.transport[data-o="create:PrepB.plate"]').first().click();
+  await shot(page, "storage.object.focus");
 
   await page.goto("/?doc=plate_batch");
   await settle(page);

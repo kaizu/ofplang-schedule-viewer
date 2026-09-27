@@ -40,6 +40,8 @@ export interface GanttOptions {
    * a step two Objects share is on both lanes, but only one was picked.
    */
   readonly litObject?: string;
+  /** One activity picked within that Object: its bar on that lane stands out (D62). */
+  readonly focus?: number;
   readonly showLabels: boolean;
   /** Height of the box the chart sits in; short charts grow to fill it. */
   readonly availableHeight?: number;
@@ -141,6 +143,7 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
       bar.style,
       a?.status === "completed" ? "done" : "",
       active && isLit ? "lit" : "",
+      isLit && opts.focus !== undefined && bar.index === opts.focus ? "focus" : "",
       active && !on ? "dim" : "",
     ]
       .filter(Boolean)

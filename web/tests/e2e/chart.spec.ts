@@ -613,3 +613,52 @@ test.describe("a move and the connections it runs along, with the graph open (D6
     await expect(page.locator('#plot rect.bar.lit[data-i="1"]').first()).toBeVisible();
   });
 });
+
+test.describe("the Object view picks in two steps (D62)", () => {
+  const B = '[data-o="create:PrepB.plate"]';
+  const inspector = (page: Page) => page.locator("#inspector h3").first();
+
+  test.beforeEach(async ({ page }) => {
+    await open(page, "storage");
+    await pickView(page, "object");
+  });
+
+  test("a bar picks its Object, then the activity within it, then back", async ({ page }) => {
+    const chill = page.locator(`#plot rect.bar.resting${B}`);
+    await chill.click();
+    await expect(inspector(page)).toHaveText("object");
+    await expect(page.locator("#status-selection")).toHaveText("Selected Object · Plate · PrepB.plate");
+
+    await chill.click();
+    await expect(inspector(page)).toHaveText("processing");
+    await expect(chill).toHaveClass(/\bfocus\b/);
+    // The lane stays lit around it.
+    await expect(page.locator(`#plot rect.bar.transport${B}`).first()).toHaveClass(/\blit\b/);
+    await expect(page.locator("#status-selection")).toContainText("in Plate · PrepB.plate");
+
+    await chill.click();
+    await expect(inspector(page)).toHaveText("object");
+    await expect(chill).not.toHaveClass(/\bfocus\b/);
+  });
+
+  test("Esc steps out one level at a time; the label goes straight to the Object", async ({ page }) => {
+    const chill = page.locator(`#plot rect.bar.resting${B}`);
+    await chill.click();
+    await chill.click();
+    await page.keyboard.press("Escape");
+    await expect(inspector(page)).toHaveText("object");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#status-selection")).toContainText("Nothing selected");
+
+    await chill.click();
+    await chill.click();
+    await page.locator(`#gutter ${B}`).click();
+    await expect(inspector(page)).toHaveText("object");
+  });
+
+  test("a bar of another lane picks that Object, not an activity", async ({ page }) => {
+    await page.locator(`#plot rect.bar.resting${B}`).click();
+    await page.locator('#plot rect.bar.resting[data-o="create:PrepC.plate"]').click();
+    await expect(page.locator("#status-selection")).toHaveText("Selected Object · Plate · PrepC.plate");
+  });
+});
