@@ -550,7 +550,7 @@ function renderGraphPane(): void {
     ...(arc ? { arc } : {}),
     ...(subtree !== undefined ? { subtree } : {}),
   });
-  host.setAttribute("viewBox", `-2 -2 ${g.width} ${g.height}`);
+  host.setAttribute("viewBox", g.viewBox);
   host.setAttribute("width", String(Math.round(g.width * state.graphZoom)));
   host.setAttribute("height", String(Math.round(g.height * state.graphZoom)));
   host.innerHTML = g.svg;

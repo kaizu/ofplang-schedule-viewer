@@ -41,9 +41,19 @@ export interface GraphOptions {
 
 export interface GraphRender {
   readonly svg: string;
+  /** The picture's size, margin included, and the `viewBox` that frames it. */
   readonly width: number;
   readonly height: number;
+  readonly viewBox: string;
 }
+
+/**
+ * Room around the outermost box. The entry composite's border sits on the
+ * picture's edge, and its port dots are centred on that border: a dot reaches
+ * 3.1px out (radius 2.6 plus half its outline) and a lit outline 1px, so a
+ * 2px margin cut the outer half of every entry input and output off.
+ */
+export const GRAPH_MARGIN = 8;
 
 const esc = (s: string): string =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -118,8 +128,9 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
 
   return {
     svg: shells + edges + hits + leaves,
-    width: layout.width + 4,
-    height: layout.height + 4,
+    width: layout.width + 2 * GRAPH_MARGIN,
+    height: layout.height + 2 * GRAPH_MARGIN,
+    viewBox: `${-GRAPH_MARGIN} ${-GRAPH_MARGIN} ${layout.width + 2 * GRAPH_MARGIN} ${layout.height + 2 * GRAPH_MARGIN}`,
   };
 }
 

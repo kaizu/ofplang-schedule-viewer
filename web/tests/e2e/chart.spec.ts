@@ -285,6 +285,22 @@ test.describe("the two panes are linked", () => {
     await expect(page.locator("#graph path.edge.lit")).toHaveCount(0);
   });
 
+  test("every port dot is drawn whole, the entry's own included", async ({ page }) => {
+    // The entry composite's border is the picture's edge, and its input and
+    // output dots are centred on it: a 2px margin cut their outer halves off.
+    await open(page, "data_flow");
+    for (const expand of [false, true]) {
+      if (expand) await page.locator("#expand-all").click();
+      const cut = await page.evaluate(() => {
+        const svg = document.getElementById("graph")!.getBoundingClientRect();
+        return [...document.querySelectorAll("#graph circle.pdot")]
+          .map((c) => c.getBoundingClientRect())
+          .filter((r) => r.left < svg.left || r.right > svg.right || r.top < svg.top || r.bottom > svg.bottom).length;
+      });
+      expect(cut, expand ? "expanded" : "closed").toBe(0);
+    }
+  });
+
   test("of two arcs that share a port, the one clicked on is the one picked", async ({ page }) => {
     // data_flow's Az.a_score feeds Finish.go and the workflow's final_score:
     // their wide hit lines overlap, so the nearer drawn curve has to win.
