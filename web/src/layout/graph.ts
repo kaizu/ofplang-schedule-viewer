@@ -24,6 +24,8 @@ const BOX_PAD = 14;
 const BOX_HEADER = 25;
 /** Room inside a container's border for its own port labels. */
 const PORT_GUTTER = 78;
+/** The slot an arc takes in a column it passes through (design.md D54). */
+const LANE_H = 12;
 
 export interface Anchor {
   readonly port: string;
@@ -55,6 +57,44 @@ export interface LaidEdge {
   /** Declared types at either end, as written. Normally the same; shown apart if not. */
   readonly fromType?: string;
   readonly toType?: string;
+  /**
+   * The columns this arc passes through on its way, left to right: in each it
+   * runs level at `y` from `x0` to `x1`, in a slot kept clear for it. Absent
+   * for an arc between neighbouring columns (design.md D54).
+   */
+  readonly route?: readonly Waypoint[];
+}
+
+export interface Waypoint {
+  readonly x0: number;
+  readonly x1: number;
+  readonly y: number;
+}
+
+type Point = { readonly x: number; readonly y: number };
+
+/**
+ * The drawn path of an edge, as cubic segments `[start, control, control, end]`.
+ *
+ * Between columns it is the S-curve every arc has always been; through a
+ * column it skips it runs level in its lane. The view draws these, the hit
+ * line follows them, and the tests sample them — one shape for all three.
+ */
+export function edgeSegments(e: LaidEdge): [Point, Point, Point, Point][] {
+  const curve = (a: Point, b: Point): [Point, Point, Point, Point] => {
+    const dx = Math.max(24, (b.x - a.x) / 2);
+    return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b];
+  };
+  const out: [Point, Point, Point, Point][] = [];
+  let at: Point = e.from;
+  for (const w of e.route ?? []) {
+    const enter = { x: w.x0, y: w.y };
+    const leave = { x: w.x1, y: w.y };
+    out.push(curve(at, enter), [enter, enter, leave, leave]);
+    at = leave;
+  }
+  out.push(curve(at, e.to));
+  return out;
 }
 
 export interface GraphLayout {
@@ -74,7 +114,13 @@ interface Sized {
   readonly h: number;
   /** Relative to this node's own origin. */
   readonly placed: { readonly sized: Sized; readonly x: number; readonly y: number }[];
+  /** Lanes through skipped columns, by connection id (`laneId`), relative to this origin. */
+  readonly lanes: Readonly<Record<string, readonly Waypoint[]>>;
 }
+
+/** A connection inside a container, named by where it lands: one binding per input port. */
+const laneId = (target: string, port: string): string => `in:${target}.${port}`;
+const returnId = (port: string): string => `out:${port}`;
 
 export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): GraphLayout {
   const sized = measure(root, expanded);
@@ -134,6 +180,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
         }
         if (!from) continue;
         const toType = p.sized.node.inputTypes[port];
+        const route = s.lanes[laneId(p.sized.node.id, port)];
         edges.push({
           from: { x: from.x, y: from.y },
           to: { x: to.x, y: to.y },
@@ -144,6 +191,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
           toPort: port,
           ...(fromType !== undefined ? { fromType } : {}),
           ...(toType !== undefined ? { toType } : {}),
+          ...(route ? { route: route.map((w) => ({ x0: w.x0 + ox, x1: w.x1 + ox, y: w.y + oy })) } : {}),
         });
       }
     }
@@ -159,6 +207,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
       if (!from) continue;
       const fromType = src.sized.node.outputTypes[from.port];
       const toType = s.node.outputTypes[port];
+      const route = s.lanes[returnId(port)];
       edges.push({
         from: { x: from.x, y: from.y },
         to: { x: to.x, y: to.y },
@@ -169,6 +218,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
         toPort: port,
         ...(fromType !== undefined ? { fromType } : {}),
         ...(toType !== undefined ? { toType } : {}),
+        ...(route ? { route: route.map((w) => ({ x0: w.x0 + ox, x1: w.x1 + ox, y: w.y + oy })) } : {}),
       });
     }
 
@@ -186,7 +236,7 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
 
   if (!open) {
     const rows = Math.max(node.inputs.length, node.outputs.length, 1);
-    return { node, open, w: NODE_W, h: HEADER_H + rows * PORT_ROW + NODE_PAD_B, placed: [] };
+    return { node, open, w: NODE_W, h: HEADER_H + rows * PORT_ROW + NODE_PAD_B, placed: [], lanes: {} };
   }
 
   const children = node.children.map((c) => measure(c, expanded));
@@ -220,37 +270,151 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
   const left = BOX_PAD + (node.inputs.length ? PORT_GUTTER : 0);
   const right = BOX_PAD + (Object.keys(node.returns).length ? PORT_GUTTER : 0);
 
+  const links = connections(node, children, layer, columns.length);
+  const long = links.filter((l) => l.toCol - l.fromCol > 1);
+
+  // Column widths do not depend on order, and lanes add no width.
   let x = left;
-  let tallest = 0;
-  const geometry: { column: Sized[]; x: number; w: number; h: number }[] = [];
+  const xs: { x: number; w: number }[] = [];
   for (const column of columns) {
-    if (!column?.length) continue;
-    const w = Math.max(...column.map((c) => c.w));
-    const h = column.reduce((sum, c) => sum + c.h, 0) + GAP_Y * (column.length - 1);
-    geometry.push({ column, x, w, h });
-    tallest = Math.max(tallest, h);
+    const w = column?.length ? Math.max(...column.map((c) => c.w)) : 0;
+    xs.push({ x, w });
     x += w + GAP_X;
   }
-
   const contentW = Math.max(x - GAP_X - left, 60);
-  const contentH = Math.max(tallest, 44);
 
   const placed: Sized["placed"] = [];
-  for (const g of geometry) {
-    let y = BOX_HEADER + BOX_PAD + (contentH - g.h) / 2;
-    for (const c of g.column) {
-      placed.push({ sized: c, x: g.x + (g.w - c.w) / 2, y });
-      y += c.h + GAP_Y;
-    }
+  const lanes: Record<string, Waypoint[]> = {};
+
+  if (!long.length) {
+    // Nothing skips a column: the layout as it has always been — each column
+    // in document order, centred. A lane is only ever added, so a workflow
+    // without one is drawn exactly as before (design.md D54).
+    const heights = columns.map((col) => col.reduce((sum, c) => sum + c.h, 0) + GAP_Y * (col.length - 1));
+    const contentH = Math.max(Math.max(0, ...heights), 44);
+    columns.forEach((column, i) => {
+      let y = BOX_HEADER + BOX_PAD + (contentH - heights[i]!) / 2;
+      for (const c of column) {
+        placed.push({ sized: c, x: xs[i]!.x + (xs[i]!.w - c.w) / 2, y });
+        y += c.h + GAP_Y;
+      }
+    });
+    return { node, open, w: left + contentW + right, h: BOX_HEADER + BOX_PAD * 2 + contentH, placed, lanes };
   }
 
-  return {
-    node,
-    open,
-    w: left + contentW + right,
-    h: BOX_HEADER + BOX_PAD * 2 + contentH,
-    placed,
+  // Some arc skips a column. It gets a slot in every column it crosses, and
+  // each column is ordered so that its boxes and slots sit near what feeds
+  // them — the barycentre of their sources' port heights (design.md D54).
+  type Item = { kind: "node"; sized: Sized; h: number } | { kind: "lane"; link: Link; h: number };
+  const items: Item[][] = columns.map((col) => col.map((sized) => ({ kind: "node", sized, h: sized.h })));
+  for (const l of long) for (let c = l.fromCol + 1; c < l.toCol; c++) items[c]!.push({ kind: "lane", link: l, h: LANE_H });
+
+  const stacked = (col: readonly Item[]): number => col.reduce((sum, it) => sum + it.h, 0) + GAP_Y * (col.length - 1);
+  const contentH = Math.max(Math.max(0, ...items.map(stacked)), 44);
+
+  // Heights relative to a column's centre: centring each column afterwards
+  // shifts it as a whole, so what is compared here is what is drawn.
+  const top = new Map<Sized, number>();
+  const laneAt = new Map<string, number>();
+  const inputY = (port: string): number => {
+    const i = node.inputs.indexOf(port);
+    return (BOX_PAD * 2 + contentH) * ((i + 1) / (node.inputs.length + 1) - 0.5);
   };
+  const sourceY = (l: Link): number =>
+    l.source.kind === "input"
+      ? inputY(l.source.port)
+      : top.get(l.source.sized)! + (outputAnchors(l.source.sized).find((a) => a.port === l.source.port)?.y ?? 0);
+  const arriving = (l: Link, col: number): number =>
+    l.fromCol === col - 1 ? sourceY(l) : laneAt.get(`${l.id}@${col - 1}`)!;
+
+  items.forEach((col, c) => {
+    const want = col.map((it, i) => {
+      if (it.kind === "lane") return { it, i, key: arriving(it.link, c) };
+      // A box wants its ports level with what feeds them, so the key is where
+      // its centre would be for that, averaged over what arrives from the left.
+      const into = links.filter((l) => l.target === it.sized && l.toCol === c);
+      if (!into.length) return { it, i, key: undefined };
+      const ports = inputAnchors(it.sized);
+      const centre = (l: Link) =>
+        arriving(l, c) - (ports.find((a) => a.port === l.port)?.y ?? it.h / 2) + it.h / 2;
+      return { it, i, key: into.reduce((sum, l) => sum + centre(l), 0) / into.length };
+    });
+    // What nothing feeds from the left keeps the place it would have had.
+    let y = -stacked(col) / 2;
+    for (const w of want) {
+      w.key ??= y + w.it.h / 2;
+      y += w.it.h + GAP_Y;
+    }
+    want.sort((a, b) => a.key! - b.key! || a.i - b.i);
+
+    let at = -stacked(col) / 2;
+    col.length = 0;
+    for (const { it } of want) {
+      col.push(it);
+      if (it.kind === "node") top.set(it.sized, at);
+      else laneAt.set(`${it.link.id}@${c}`, at + it.h / 2);
+      at += it.h + GAP_Y;
+    }
+  });
+
+  const centre = BOX_HEADER + BOX_PAD + contentH / 2;
+  items.forEach((col, c) => {
+    const { x: cx, w } = xs[c]!;
+    for (const it of col) {
+      if (it.kind === "node") placed.push({ sized: it.sized, x: cx + (w - it.sized.w) / 2, y: centre + top.get(it.sized)! });
+      else (lanes[it.link.id] ??= []).push({ x0: cx, x1: cx + w, y: centre + laneAt.get(`${it.link.id}@${c}`)! });
+    }
+  });
+
+  return { node, open, w: left + contentW + right, h: BOX_HEADER + BOX_PAD * 2 + contentH, placed, lanes };
+}
+
+/** One connection inside a container, with the columns of its two ends. */
+interface Link {
+  readonly id: string;
+  /** -1 is the container's own input border. */
+  readonly fromCol: number;
+  /** One past the last column is its output border. */
+  readonly toCol: number;
+  readonly source: { kind: "input"; port: string } | { kind: "node"; sized: Sized; port: string };
+  /** The box it lands on, and on which port; absent for a returned output. */
+  readonly target?: Sized;
+  readonly port?: string;
+}
+
+function connections(
+  node: GraphNode,
+  children: readonly Sized[],
+  layer: ReadonlyMap<string, number>,
+  columns: number,
+): Link[] {
+  const byId = new Map(children.map((c) => [c.node.id, c]));
+  const split = (from: string): [string, string] => {
+    const dot = from.indexOf(".");
+    return dot < 0 ? [from, ""] : [from.slice(0, dot), from.slice(dot + 1)];
+  };
+  const out: Link[] = [];
+  for (const c of children) {
+    const toCol = layer.get(c.node.id) ?? 0;
+    for (const [port, b] of Object.entries(c.node.bindings)) {
+      const [head, tail] = split(b.from);
+      const id = laneId(c.node.id, port);
+      if (head === "inputs") {
+        out.push({ id, fromCol: -1, toCol, source: { kind: "input", port: tail }, target: c, port });
+        continue;
+      }
+      const src = byId.get(head);
+      if (src && src !== c)
+        out.push({ id, fromCol: layer.get(src.node.id) ?? 0, toCol, source: { kind: "node", sized: src, port: tail }, target: c, port });
+    }
+  }
+  for (const [port, from] of Object.entries(node.returns)) {
+    const [head, tail] = split(from);
+    const src = byId.get(head);
+    if (src)
+      out.push({ id: returnId(port), fromCol: layer.get(src.node.id) ?? 0, toCol: columns, source: { kind: "node", sized: src, port: tail } });
+  }
+  return out;
 }
 
 function inputAnchors(s: Sized): Anchor[] {

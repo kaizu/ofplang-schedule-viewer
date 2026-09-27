@@ -6,7 +6,7 @@
  * the boxes people click on last.
  */
 
-import { GRAPH_METRICS, layoutGraph, type GraphLayout, type LaidNode } from "../layout/graph";
+import { edgeSegments, GRAPH_METRICS, layoutGraph, type GraphLayout, type LaidEdge, type LaidNode } from "../layout/graph";
 import type { GraphNode } from "../model/graph";
 
 const { HEADER_H, PORT_ROW, BOX_HEADER } = GRAPH_METRICS;
@@ -94,8 +94,7 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
       const cls = ["edge", e.object ? "" : "data", on ? "lit" : "", active && !on ? "dim" : ""]
         .filter(Boolean)
         .join(" ");
-      const dx = Math.max(24, (e.to.x - e.from.x) / 2);
-      const d = `M ${r(e.from.x)} ${r(e.from.y)} C ${r(e.from.x + dx)} ${r(e.from.y)}, ${r(e.to.x - dx)} ${r(e.to.y)}, ${r(e.to.x)} ${r(e.to.y)}`;
+      const d = pathOf(e);
       const head = `<path class="arrow${on ? " lit" : ""}${active && !on ? " dim" : ""}" d="M ${r(e.to.x)} ${r(e.to.y)} l -5.5 -2.8 l 0 5.6 z"/>`;
       return `<path class="${cls}" d="${d}"/>${head}`;
     })
@@ -106,8 +105,7 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
   // that carries its identity, above the drawn edges and below the boxes.
   const hits = layout.edges
     .map((e) => {
-      const dx = Math.max(24, (e.to.x - e.from.x) / 2);
-      const d = `M ${r(e.from.x)} ${r(e.from.y)} C ${r(e.from.x + dx)} ${r(e.from.y)}, ${r(e.to.x - dx)} ${r(e.to.y)}, ${r(e.to.x)} ${r(e.to.y)}`;
+      const d = pathOf(e);
       return (
         `<path class="edge-hit" d="${d}" data-from="${esc(e.fromKey)}" data-from-port="${esc(e.fromPort)}" ` +
         `data-to="${esc(e.toKey)}" data-to-port="${esc(e.toPort)}" data-object="${e.object}"` +
@@ -126,6 +124,16 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
 }
 
 const r = (n: number): number => Math.round(n * 10) / 10;
+
+/** An edge's SVG path: its segments (layout), joined. The hit line uses the same. */
+function pathOf(e: LaidEdge): string {
+  const segs = edgeSegments(e);
+  const [start] = segs[0]!;
+  return (
+    `M ${r(start.x)} ${r(start.y)} ` +
+    segs.map(([, c1, c2, end]) => `C ${r(c1.x)} ${r(c1.y)}, ${r(c2.x)} ${r(c2.y)}, ${r(end.x)} ${r(end.y)}`).join(" ")
+  );
+}
 
 function shell(n: LaidNode, cls: string): string {
   const parts = [`<g class="${cls}" data-key="${esc(n.key)}" transform="translate(${r(n.x)},${r(n.y)})">`];
