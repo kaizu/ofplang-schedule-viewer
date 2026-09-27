@@ -1,0 +1,7 @@
+# The boundary for data_flow (SPECIFICATIONS §6.8): the entry input `sample`,
+# a plate, starts on the loader — the same spot ofplang-run's
+# examples/render_data_flow.py gives it.
+interface:
+  inputs:
+    sample: loader.stage
+activities: []

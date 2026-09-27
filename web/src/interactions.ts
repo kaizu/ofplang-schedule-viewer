@@ -46,9 +46,46 @@ export interface GraphHandlers {
   readonly onSelectEdge: (edge: EdgeRef) => void;
 }
 
-const edgeAt = (target: EventTarget | null): EdgeRef | undefined => {
-  const hit = (target as Element | null)?.closest<SVGPathElement>(".edge-hit");
-  if (!hit) return undefined;
+/**
+ * The edge under the pointer.
+ *
+ * Hit lines are wide, so where two arcs leave one port — `Az.a_score` feeds
+ * both a step and the workflow's output — their hit lines overlap, and the one
+ * drawn last would take every click near the shared end. So every hit line
+ * under the pointer is a candidate, and the one whose drawn curve passes
+ * nearest wins.
+ */
+const edgeUnder = (e: MouseEvent): EdgeRef | undefined => {
+  const hits = document
+    .elementsFromPoint(e.clientX, e.clientY)
+    .filter((el): el is SVGPathElement => el instanceof SVGPathElement && el.classList.contains("edge-hit"));
+  if (!hits.length) return undefined;
+  const best = hits.length === 1 ? hits[0]! : nearest(hits, e);
+  return edgeOf(best);
+};
+
+function nearest(paths: readonly SVGPathElement[], e: MouseEvent): SVGPathElement {
+  let best = paths[0]!;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const p of paths) {
+    const ctm = p.getScreenCTM();
+    if (!ctm) continue;
+    const at = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const length = p.getTotalLength();
+    // Every few pixels along the curve is close enough for a 10px-wide target.
+    for (let s = 0; s <= length; s += 3) {
+      const q = p.getPointAtLength(s);
+      const d = (q.x - at.x) ** 2 + (q.y - at.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+  }
+  return best;
+}
+
+const edgeOf = (hit: SVGPathElement): EdgeRef => {
   const d = hit.dataset;
   return {
     fromKey: d["from"] ?? "",
@@ -86,7 +123,7 @@ export function wireGraphPointer(handlers: GraphHandlers): void {
     (target as Element | null)?.closest<SVGGElement>("[data-key]")?.dataset["key"];
 
   host.addEventListener("click", (e) => {
-    const edge = edgeAt(e.target);
+    const edge = edgeUnder(e);
     if (edge) {
       handlers.onSelectEdge(edge);
       return;
@@ -110,7 +147,7 @@ export function wireGraphPointer(handlers: GraphHandlers): void {
   });
 
   host.addEventListener("mousemove", (e) => {
-    const edge = edgeAt(e.target);
+    const edge = edgeUnder(e);
     if (edge) {
       tip.innerHTML =
         `<div class="tt">${escapeHtml(edgeLabel(edge))}</div>` +

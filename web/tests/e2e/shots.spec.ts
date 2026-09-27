@@ -27,6 +27,15 @@ const settle = async (page: Page): Promise<void> => {
 
 test.describe.configure({ mode: "serial" });
 
+/** Where on screen the middle of a drawn path is. */
+async function midpointOf(page: Page, selector: string): Promise<{ x: number; y: number }> {
+  return page.evaluate((sel) => {
+    const p = document.querySelector<SVGPathElement>(sel)!;
+    const m = p.getPointAtLength(p.getTotalLength() / 2).matrixTransform(p.getScreenCTM()!);
+    return { x: m.x, y: m.y };
+  }, selector);
+}
+
 test("the plans, in both themes", async ({ page }) => {
   for (const doc of ["simple", "two_arms", "reformatter", "plate_batch"]) {
     await page.goto(`/?doc=${doc}`);
@@ -112,6 +121,18 @@ test("a joint plan, dropped, and refused with its reason (D42)", async ({ page }
   }, text);
   await page.locator("#banner:not([hidden])").waitFor();
   await shot(page, "gate.joint-plan");
+});
+
+test("Pure Data, and an entry with inputs and outputs (data_flow)", async ({ page }) => {
+  await page.goto("/?doc=data_flow");
+  await settle(page);
+  await page.locator("#expand-all").click();
+  await shot(page, "data_flow.expanded");
+  // Clicked by position, as a person would: this arc shares its first stretch
+  // with the one to the workflow's output, and the nearer curve must win.
+  const at = await midpointOf(page, '#graph .edge-hit[data-from="Az"][data-to="Finish"]');
+  await page.mouse.click(at.x, at.y);
+  await shot(page, "data_flow.pure-data-arc");
 });
 
 test("one pane on its own (D46)", async ({ page }) => {

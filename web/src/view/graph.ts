@@ -170,16 +170,20 @@ function leaf(n: LaidNode, cls: string): string {
 function ports(n: LaidNode): string {
   const out: string[] = [];
   const label = n.open ? 11 : 12;
+  // A closed box's arcs arrive from outside, so its port names sit on the
+  // port's line. An open container's arcs run *inward* from its border along
+  // that same line, through the name — so there the name sits just above it.
+  const dy = n.open ? -4 : 3;
   for (const a of n.inputs) {
     const y = r(a.y - n.y);
     out.push(`<circle class="pdot" cx="0" cy="${y}" r="2.6"/>`);
-    out.push(`<text class="pname" x="7" y="${y + 3}">${esc(clip(a.port, label))}</text>`);
+    out.push(`<text class="pname" x="7" y="${y + dy}">${esc(clip(a.port, label))}</text>`);
   }
   for (const a of n.outputs) {
     const y = r(a.y - n.y);
     out.push(`<circle class="pdot" cx="${r(n.w)}" cy="${y}" r="2.6"/>`);
     out.push(
-      `<text class="pname" x="${r(n.w) - 7}" y="${y + 3}" text-anchor="end">${esc(clip(a.port, label))}</text>`,
+      `<text class="pname" x="${r(n.w) - 7}" y="${y + dy}" text-anchor="end">${esc(clip(a.port, label))}</text>`,
     );
   }
   return out.join("");

@@ -285,6 +285,24 @@ test.describe("the two panes are linked", () => {
     await expect(page.locator("#graph path.edge.lit")).toHaveCount(0);
   });
 
+  test("of two arcs that share a port, the one clicked on is the one picked", async ({ page }) => {
+    // data_flow's Az.a_score feeds Finish.go and the workflow's final_score:
+    // their wide hit lines overlap, so the nearer drawn curve has to win.
+    await open(page, "data_flow");
+    await page.locator("#expand-all").click();
+    for (const [to, label] of [["Finish", "Az.a_score → Finish.go"], ["", "Az.a_score → outputs.final_score"]] as const) {
+      const at = await page.evaluate((t) => {
+        const p = document.querySelector<SVGPathElement>(`#graph .edge-hit[data-from="Az"][data-to="${t}"]`)!;
+        const m = p.getPointAtLength(p.getTotalLength() / 2).matrixTransform(p.getScreenCTM()!);
+        return { x: m.x, y: m.y };
+      }, to);
+      await page.mouse.click(at.x, at.y);
+      await expect(page.locator("#status-selection")).toContainText(label);
+      await expect(page.locator("#inspector")).toContainText("Score (Pure Data)");
+      await page.keyboard.press("Escape");
+    }
+  });
+
   test("picking a box lights everything under it, and nothing else", async ({ page }) => {
     await open(page, "plate_batch");
     await page.locator('#graph [data-key="b1"] rect.box').click();

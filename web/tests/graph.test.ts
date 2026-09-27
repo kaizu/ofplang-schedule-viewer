@@ -222,7 +222,7 @@ processes:
           state: { plate: { from: inputs.plate } }
         - id: Log
           process: log
-          data: { value: { from: Read.od } }
+          bind: { value: { from: Read.od } }
       returns:
         plate: { from: Read.plate }
         od: { from: Read.od }

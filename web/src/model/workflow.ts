@@ -36,7 +36,7 @@ export interface NodeInvocation {
   readonly process: string;
   /** Object-bearing bindings. */
   readonly state: Readonly<Record<string, Binding>>;
-  /** Pure Data bindings. */
+  /** Pure Data bindings — the node's `bind` section (workflow spec §11). */
   readonly data: Readonly<Record<string, Binding>>;
 }
 

@@ -137,7 +137,10 @@ function readNode(raw: unknown, path: string): NodeInvocation {
     id: reqString(n["id"], at(path, "id")),
     process: reqString(n["process"], at(path, "process")),
     state: readBindings(n["state"], at(path, "state")),
-    data: readBindings(n["data"], at(path, "data")),
+    // workflow spec §11: `state` binds Object-bearing inputs, `bind` Pure Data.
+    // (This read `data` until 2026-09-27 — a key the spec does not have, so
+    // every Pure Data arc was silently dropped; nothing bundled then had one.)
+    data: readBindings(n["bind"], at(path, "bind")),
   };
 }
 
