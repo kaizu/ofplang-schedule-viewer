@@ -19,8 +19,9 @@ ofp-export view workflow.yaml -o wf.html      # a workflow on its own
 ```
 
 `ofp-export view` writes the viewer as **one HTML file with the documents in
-it**, to open from disk or send to someone. It is also meant to be reachable as
-`ofp export view` and, under labcode, `lc export view`.
+it**, to open from disk or send to someone. It is also `ofp export view`
+(`pip install "ofplang[export]"`, from ofplang 0.7) and, under labcode,
+`lc export view` (`labcode[export]`, from labcode 0.9).
 
 **→ [ofplang.github.io/export](https://ofplang.github.io/export/)**
 — eleven plans are bundled (one of them, `data_flow`, curated here: Pure Data, and an entry with inputs and outputs); `?doc=plate_batch` opens one directly. Drop your own
@@ -36,9 +37,11 @@ it lights up. No install, no server, no Python.
 
 > **Status: early but usable.** Both panes work and are linked: pick a bar and
 > the workflow box it came from lights up, pick a box and everything under it
-> lights up in the plan. Plans can be exported as SVG or put in a link.
-> `prototype/` holds the single-file look-and-feel study the visual decisions
-> were made against.
+> lights up in the plan, pick an arc and it names the type it carries and the
+> moves that carry it. No arc is drawn through a box it does not join. Plans
+> can be exported as SVG or put in a link. `prototype/` holds the single-file
+> look-and-feel study the visual decisions were made against, under the name
+> the viewer had then.
 
 ## The command
 
@@ -94,7 +97,10 @@ link* is hidden, since a link made from a file on disk would point at the disk.
 | `web/scripts/embed.mjs` | puts documents into that template — the contract, in one place |
 | `ofplang/export/` | the `ofp-export` Python package; `template.py` is the same contract in Python |
 | `tests/` | its tests (pytest), against the pinned submodule's examples |
+| `skills/ofp-export/SKILL.md` | how an agent calls `ofp-export`; not in the package |
+| `datasets/curated/` | plans bundled here that the submodule does not ship (`data_flow`), with their provenance |
 | `web/tests/golden/` | every example the pinned submodule ships must read |
+| `web/tests/routing.test.ts` | no arc of any bundled workflow runs through a box it does not join |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
 | `web/public/favicon.png` | the ofplang mark, from [`ofplang/spec`](https://github.com/ofplang/spec) `logos/symbol-circle.png`; the SVG version is inline in `web/index.html` |

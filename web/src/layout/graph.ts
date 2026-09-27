@@ -2,11 +2,17 @@
  * Lay the workflow out left to right, containers nested in place.
  *
  * A layered layout rather than a library: the graphs here are dataflow, so the
- * layer of a node is one past the deepest sibling it reads from, and that is
- * the whole algorithm. Ports get their own anchors because an arc between two
- * multi-port steps is ambiguous otherwise (D19), and a closed composite keeps
- * the ports of the process it stands for, so an edge into it lands somewhere
- * meaningful whether it is open or shut.
+ * layer of a node is one past the deepest sibling it reads from. Ports get
+ * their own anchors because an arc between two multi-port steps is ambiguous
+ * otherwise (D19), and a closed composite keeps the ports of the process it
+ * stands for, so an edge into it lands somewhere meaningful whether it is open
+ * or shut.
+ *
+ * An arc that skips a column gets a lane through each column it crosses, so it
+ * runs through no box it does not join; where a container has one, its columns
+ * are ordered by where what feeds them arrives. A container without one is
+ * laid out as layers alone (D54). One pass, left to right: nothing iterates to
+ * a fixed point, so the layout always ends.
  *
  * Pure: no DOM, no colours. Positions are absolute, in one coordinate space.
  */

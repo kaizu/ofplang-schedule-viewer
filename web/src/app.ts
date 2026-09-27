@@ -1,9 +1,11 @@
 /**
  * The application: load a plan, draw it, let someone read it.
  *
- * Four ways in (design.md D9): a bundled dataset named by `?doc=`, files
- * dropped on the window, and — from P2 — a share link and an external URL.
- * Everything else here is state: which dataset, which view, what is selected.
+ * Four ways in: a bundled dataset named by `?doc=`, files dropped on the
+ * window, a share link (`#d=`, design.md D9), and the documents a single-file
+ * viewer carries inside it (D48). An external URL (D9 ③) is not built yet.
+ * Everything else here is state: which dataset, which view, which panes, what
+ * is selected.
  */
 
 import { parse as parseYaml } from "yaml";
