@@ -114,6 +114,17 @@ def test_the_opening_view_is_carried_only_when_asked(tmp_path, template, capsys)
     assert "ui" not in payload_of(out.read_text(encoding="utf-8"))
 
 
+@pytest.mark.parametrize("argv", [["--help"], ["view", "--help"]])
+def test_help_is_ascii_so_any_console_can_print_it(argv, capsys):
+    # A Windows console prints in its own code page; under cp932 an em dash in
+    # the description made `ofp-export view --help` fail with UnicodeEncodeError.
+    with pytest.raises(SystemExit):
+        main(argv)
+    text = capsys.readouterr().out
+    assert "usage:" in text
+    assert text.isascii(), sorted({c for c in text if not c.isascii()})
+
+
 # ── the text arrives unchanged ─────────────────────────────────────────────
 
 

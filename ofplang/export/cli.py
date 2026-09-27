@@ -51,8 +51,10 @@ def _parser() -> argparse.ArgumentParser:
         "view",
         help="the interactive viewer as one self-contained HTML file",
         description=(
-            "Write the interactive viewer — the workflow's dataflow graph and the plan's Gantt chart, "
-            "linked — as one HTML file that opens from disk with nothing beside it. Give a plan, a "
+            # ASCII only, like the warnings: a Windows console prints help in its own code page,
+            # and cp932 cannot encode an em dash (`--help` failed there with UnicodeEncodeError).
+            "Write the interactive viewer (the workflow's dataflow graph and the plan's Gantt chart, "
+            "linked) as one HTML file that opens from disk with nothing beside it. Give a plan, a "
             "workflow, an environment, in any order; a plan's own `meta` supplies the other two unless "
             "they are given."
         ),
