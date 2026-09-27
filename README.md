@@ -97,7 +97,7 @@ link* is hidden, since a link made from a file on disk would point at the disk.
 | `web/tests/golden/` | every example the pinned submodule ships must read |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
-| `web/public/favicon.png` | the ofplang mark, from [`ofplang/spec`](https://github.com/ofplang/spec) `logos/symbol-square.png`; the SVG versions are inline in `web/index.html` |
+| `web/public/favicon.png` | the ofplang mark, from [`ofplang/spec`](https://github.com/ofplang/spec) `logos/symbol-circle.png`; the SVG version is inline in `web/index.html` |
 
 ## Why a TypeScript reader instead of reusing the Python one
 
