@@ -261,6 +261,11 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
   };
   for (const c of children) depthOf(c, new Set());
 
+  // Layers of a valid (acyclic) body run 0, 1, 2… without a gap. A cycle —
+  // invalid v0, but anything can be dropped on the window — can leave one, so
+  // the layers are renumbered densely: an empty column would have no height.
+  const dense = new Map([...new Set(layer.values())].sort((a, b) => a - b).map((d, i) => [d, i]));
+  for (const [id, d] of layer) layer.set(id, dense.get(d)!);
   const columns: Sized[][] = [];
   for (const c of children) {
     const d = layer.get(c.node.id) ?? 0;
@@ -332,7 +337,9 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
       if (it.kind === "lane") return { it, i, key: arriving(it.link, c) };
       // A box wants its ports level with what feeds them, so the key is where
       // its centre would be for that, averaged over what arrives from the left.
-      const into = links.filter((l) => l.target === it.sized && l.toCol === c);
+      // Only what arrives from the left: in a cycle a link can come from a
+      // column not yet ordered, and there is nothing to line up with.
+      const into = links.filter((l) => l.target === it.sized && l.toCol === c && l.fromCol < c);
       if (!into.length) return { it, i, key: undefined };
       const ports = inputAnchors(it.sized);
       const centre = (l: Link) =>

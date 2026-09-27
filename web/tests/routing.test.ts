@@ -124,3 +124,36 @@ entry: main
     expect(l.edges.every((e) => (e.route ?? []).length === 0)).toBe(true);
   });
 });
+
+describe("a cycle (invalid v0, but anything can be dropped on the window)", () => {
+  // A cycle leaves a gap in the layers, and a long arc gives it a lane: the
+  // layout must still end, with every coordinate a number.
+  const wf = readWorkflowText(`
+spec_version: "0.0"
+processes:
+  s: { kind: atomic, inputs: { a: { type: Float, phase: data }, b: { type: Float, phase: data } }, outputs: { o: { type: Float, phase: data } } }
+  main:
+    kind: composite
+    inputs: {}
+    outputs: { r: { type: Float, phase: data } }
+    body:
+      nodes:
+        - { id: A, process: s, bind: { a: { from: D.o } } }
+        - { id: B, process: s, bind: { a: { from: A.o } } }
+        - { id: C, process: s, bind: { a: { from: B.o } } }
+        - { id: D, process: s, bind: { a: { from: C.o }, b: { from: A.o } } }
+      returns: { r: { from: A.o } }
+entry: main
+`);
+
+  it("is laid out, with finite coordinates", () => {
+    const l = layoutGraph(buildGraph(wf), new Set());
+    const numbers = [
+      l.width,
+      l.height,
+      ...l.leaves.flatMap((n) => [n.x, n.y, n.w, n.h]),
+      ...l.edges.flatMap((e) => [e.from.x, e.from.y, e.to.x, e.to.y, ...(e.route ?? []).flatMap((w) => [w.x0, w.x1, w.y])]),
+    ];
+    expect(numbers.every(Number.isFinite)).toBe(true);
+  });
+});
