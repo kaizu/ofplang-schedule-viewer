@@ -679,3 +679,17 @@ test.describe("the Object view picks in two steps (D62)", () => {
     await expect(page.locator("#status-selection")).toHaveText("Selected Object · Plate · PrepC.plate");
   });
 });
+
+test.describe("the Object view in a share link (T2, plan step 5)", () => {
+  test("a link copied in the Object view reopens on it", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await open(page, "storage");
+    await pickView(page, "object");
+    await page.locator("#share").click();
+    await expect(page.locator("#status-selection")).toContainText("Link copied");
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    await page.goto(url.replace(/\?[^#]*/, ""));
+    await expect(page.locator('#views button[data-view="object"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#gutter [data-o]")).toHaveCount(3);
+  });
+});

@@ -12,7 +12,7 @@ beside it.
 ## Command
 
 ```sh
-ofp-export view <file>... -o <out.html> [--layout split|workflow|plan] [--gantt device|flow|activity] [--json]
+ofp-export view <file>... -o <out.html> [--layout split|workflow|plan] [--gantt device|flow|activity|object] [--json]
 ```
 
 Also reachable as `ofp export view …` (and `lc export view …` under labcode).
@@ -26,6 +26,11 @@ Also reachable as `ofp export view …` (and `lc export view …` under labcode)
   summary instead (paths, activity count, outcome, warnings).
 - `--layout` / `--gantt` choose what the page opens on. Leave them out unless
   asked: a workflow alone already opens on the workflow alone.
+- `--gantt object` opens on one lane per physical Object (a plate, a sample),
+  from where it appears to where it is used up. Use it when the question is
+  what happens to one thing, not what a machine is doing. It needs the plan's
+  workflow — that is what tells one plate from another — and the page opens on
+  the device view where the Objects cannot be told apart.
 
 ## Exit codes
 
@@ -36,8 +41,9 @@ Also reachable as `ofp export view …` (and `lc export view …` under labcode)
 | 3 | refused — nothing written | tell the person why (stderr): e.g. a **joint plan** (several workflows scheduled together as `jobs`) is not drawn by this viewer |
 
 Warnings (exit 0) mean part of the workflow is shown only as its source
-structure — `$import` not expanded, generics, structured nodes. The file is
-still worth sending; say what is missing.
+structure — `$import` not expanded, generics, structured nodes — or that
+`--gantt object` was asked for without a workflow, so the page opens on the
+device view. The file is still worth sending; say what is missing.
 
 ## Examples
 

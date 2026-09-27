@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .documents import InputError, collect, refusals, warnings
+from .documents import Finding, InputError, collect, refusals, warnings
 from .template import TemplateError, embed, load_template, template_build
 
 EXIT_OK = 0
@@ -36,7 +36,7 @@ EXIT_INPUT = 2
 EXIT_REFUSED = 3
 
 LAYOUTS = ("split", "workflow", "plan")
-GANTT_VIEWS = ("device", "flow", "activity")
+GANTT_VIEWS = ("device", "flow", "activity", "object")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -66,7 +66,14 @@ def _parser() -> argparse.ArgumentParser:
         "-o", "--out", type=Path, metavar="FILE", help="write the HTML here (default: standard output)"
     )
     v.add_argument("--layout", choices=LAYOUTS, help="panes to open on (default: decided by what was given)")
-    v.add_argument("--gantt", choices=GANTT_VIEWS, help="Gantt view to open on (default: device)")
+    v.add_argument(
+        "--gantt",
+        choices=GANTT_VIEWS,
+        help=(
+            "Gantt view to open on (default: device). `object` follows each Object through the plan; "
+            "it needs the workflow, and the page opens on device where the Objects cannot be told apart"
+        ),
+    )
     v.add_argument(
         "--name", help="what the page calls the documents (default: the plan's or workflow's file name)"
     )
@@ -106,6 +113,16 @@ def _view(args: argparse.Namespace) -> int:
         return EXIT_REFUSED
 
     warned = warnings(docs)
+    if args.gantt == "object" and (docs.plan is None or docs.workflow is None):
+        # The page decides whether the Objects can be told apart (design.md D59);
+        # this much is visible from here, and worth saying before anyone looks.
+        warned.append(
+            Finding(
+                "the Object view (`--gantt object`)",
+                "--gantt",
+                "it needs a plan and its workflow; the page opens on the device view instead",
+            )
+        )
     for f in warned:
         print(f"ofp-export: warning: {f.line()}", file=sys.stderr)
 

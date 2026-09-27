@@ -114,6 +114,51 @@ def test_the_opening_view_is_carried_only_when_asked(tmp_path, template, capsys)
     assert "ui" not in payload_of(out.read_text(encoding="utf-8"))
 
 
+def test_the_object_view_is_carried_like_the_others(tmp_path, template, capsys):
+    out = tmp_path / "o.html"
+    code, _, err = run(
+        capsys,
+        str(OUTPUTS / "storage.plan.yaml"),
+        "--gantt",
+        "object",
+        "-o",
+        str(out),
+        "--template",
+        str(template),
+    )
+    assert code == EXIT_OK
+    assert err == ""
+    assert payload_of(out.read_text(encoding="utf-8"))["ui"] == {"view": "object"}
+
+
+def test_the_object_view_without_a_workflow_is_written_with_a_warning(tmp_path, template, capsys):
+    # The page tells Objects apart by the workflow's declarations (design.md D59)
+    # and opens on the device view without it; say so before anyone looks.
+    out = tmp_path / "o.html"
+    code, stdout, err = run(
+        capsys,
+        str(OUTPUTS / "storage.plan.yaml"),
+        "--no-follow",
+        "--gantt",
+        "object",
+        "-o",
+        str(out),
+        "--json",
+        "--template",
+        str(template),
+    )
+    assert code == EXIT_OK
+    assert "warning: the Object view (`--gantt object`) at --gantt" in err
+    assert json.loads(stdout)["warnings"] == [
+        {
+            "what": "the Object view (`--gantt object`)",
+            "at": "--gantt",
+            "why": "it needs a plan and its workflow; the page opens on the device view instead",
+        }
+    ]
+    assert payload_of(out.read_text(encoding="utf-8"))["ui"] == {"view": "object"}
+
+
 @pytest.mark.parametrize("argv", [["--help"], ["view", "--help"]])
 def test_help_is_ascii_so_any_console_can_print_it(argv, capsys):
     # A Windows console prints in its own code page; under cp932 an em dash in

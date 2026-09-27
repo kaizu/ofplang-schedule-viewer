@@ -35,6 +35,12 @@ dataflow graph and the Gantt chart of a plan side by side, linked: pick a bar
 and the workflow node it came from lights up, pick a node and every bar under
 it lights up. No install, no server, no Python.
 
+The Gantt chart slices the plan four ways: by machine, by top-level step, by
+activity, and by **Object** — one lane per plate or sample, from where it
+appears to where it is used up, with every step, move and wait on the way.
+Which Object is which comes from the workflow's `objects` declarations, since
+a plan names none; where they cannot be followed, that view is not offered.
+
 > **Status: early but usable.** Both panes work and are linked: pick a bar and
 > the workflow box it came from lights up, pick a box and everything under it
 > lights up in the plan, pick an arc and it names the type it carries and the
@@ -46,7 +52,7 @@ it lights up. No install, no server, no Python.
 ## The command
 
 ```sh
-ofp-export view <file>... [-o OUT] [--layout split|workflow|plan] [--gantt device|flow|activity]
+ofp-export view <file>... [-o OUT] [--layout split|workflow|plan] [--gantt device|flow|activity|object]
                           [--name NAME] [--no-follow] [--json]
 ```
 

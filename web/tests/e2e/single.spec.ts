@@ -160,3 +160,43 @@ test("an empty viewer asks for a drop, and takes one", async ({ page }, info) =>
   await page.dispatchEvent("body", "drop", { dataTransfer });
   await expect(page.locator("#graph g.gnode")).toHaveCount(9);
 });
+
+test.describe("the Object view, asked for by the Python command (T2, plan step 5)", () => {
+  const write = (out: string, ...args: string[]) => {
+    const repo = fileURLToPath(new URL("../../../", import.meta.url));
+    const [python, ...lead] = findPython();
+    const run = spawnSync(
+      python!,
+      [...lead, "-m", "ofplang.export", "view", ...args, "--gantt", "object", "--template", TEMPLATE, "-o", out],
+      { cwd: repo, encoding: "utf8" },
+    );
+    expect(run.status, `${python} said: ${run.stderr || run.error}`).toBe(0);
+    return run.stderr;
+  };
+
+  test("opens on it, one lane per Object", async ({ page }, info) => {
+    const out = info.outputPath("object.html");
+    expect(write(out, "external/ofplang-schedule/examples/outputs/storage.plan.yaml")).toBe("");
+    await page.goto(pathToFileURL(out).href);
+    await expect(page.locator('#views button[data-view="object"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#gutter [data-o]")).toHaveCount(3);
+  });
+
+  test("without a workflow, warns, and the page opens on Device with the reason on the button", async ({ page }, info) => {
+    const out = info.outputPath("object-no-workflow.html");
+    const err = write(out, "external/ofplang-schedule/examples/outputs/storage.plan.yaml", "--no-follow");
+    expect(err).toContain("warning: the Object view (`--gantt object`)");
+
+    await page.goto(pathToFileURL(out).href);
+    await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+    const button = page.locator('#views button[data-view="object"]');
+    await expect(page.locator('#views button[data-view="device"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(button).toHaveAttribute("aria-disabled", "true");
+    await expect(button).toHaveAttribute("title", /no workflow/);
+    // Marked unavailable, not disabled, so a click still reaches it — and does
+    // nothing. (Playwright will not click an aria-disabled button unforced.)
+    await button.click({ force: true });
+    await expect(page.locator('#views button[data-view="device"]')).toHaveAttribute("aria-pressed", "true");
+    await page.screenshot({ path: info.outputPath("unavailable.png") });
+  });
+});
