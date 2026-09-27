@@ -117,6 +117,34 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* The rail must never widen the page: it holds a picker, the layout switch
+   and the link besides the readouts, so on a narrow window the least needed
+   parts go first — the tag, the picker's caption, then the activity count. */
+.rail {
+  min-width: 0;
+}
+.rail > * {
+  flex-shrink: 0;
+}
+.rail button {
+  white-space: nowrap;
+}
+#dataset {
+  flex: 0 1 auto;
+  min-width: 120px;
+}
+@media (max-width: 1180px) {
+  .tagchip,
+  .rail > label.lg {
+    display: none;
+  }
+}
+@media (max-width: 1040px) {
+  .readout:has(#ro-count) {
+    display: none;
+  }
+}
+
 .wordmark {
   display: flex;
   align-items: center;
@@ -239,6 +267,12 @@ main {
 .stack > * {
   min-height: 0;
   min-width: 0;
+}
+/* One pane on its own takes the whole column; the other and the handle are
+   `hidden` (D35), so a single track is all that is left to size (D46). */
+.stack[data-layout="workflow"],
+.stack[data-layout="plan"] {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .splitter {

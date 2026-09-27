@@ -20,7 +20,12 @@ export interface SharePayload {
   readonly workflow?: unknown;
   readonly environment?: unknown;
   /** Selection and view, so a link reopens on what was being pointed at. */
-  readonly ui?: { readonly view?: string; readonly expanded?: readonly string[] };
+  readonly ui?: {
+    readonly view?: string;
+    readonly expanded?: readonly string[];
+    /** Only when the person chose one; otherwise the documents decide (D46). */
+    readonly layout?: string;
+  };
 }
 
 export class ShareTooLarge extends Error {

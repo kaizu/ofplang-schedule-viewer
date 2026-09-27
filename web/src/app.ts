@@ -66,6 +66,21 @@ interface DatasetPayload {
   readonly environment: unknown;
 }
 
+/**
+ * Which panes are on screen (design.md D46). One template serves all three:
+ * a page made to show one workflow should not carry an empty plan pane, and
+ * someone reading a long plan may want the whole height for it.
+ */
+type Layout = "split" | "workflow" | "plan";
+
+const LAYOUTS: readonly { id: Layout; label: string; hint: string }[] = [
+  { id: "split", label: "Both", hint: "the workflow above, the plan below" },
+  { id: "workflow", label: "Workflow", hint: "the workflow graph on its own" },
+  { id: "plan", label: "Plan", hint: "the execution plan on its own" },
+];
+
+const isLayout = (v: unknown): v is Layout => LAYOUTS.some((l) => l.id === v);
+
 /** What is picked, in whichever pane the person picked it. */
 type Selection = { kind: "activity"; index: number } | { kind: "node"; key: string };
 
@@ -86,6 +101,8 @@ interface State {
   selected?: Selection;
   geometry?: GanttGeometry;
   split: number;
+  /** A layout the person chose. Absent means "decided by what was loaded". */
+  layout?: Layout;
   /** Kept so a share link can carry exactly what was loaded. */
   raw?: { plan: unknown; workflow: unknown; environment: unknown };
 }
@@ -188,6 +205,7 @@ function litNodes(): Highlight {
 
 export async function start(): Promise<void> {
   buildViewButtons();
+  buildLayoutButtons();
   wireControls();
   wireDropTarget();
   wirePointer();
@@ -216,6 +234,7 @@ export async function start(): Promise<void> {
       "Opened from a shared link.",
     );
     if (shared.ui?.view) state.view = shared.ui.view as GanttView;
+    if (isLayout(shared.ui?.layout)) state.layout = shared.ui.layout;
     if (shared.ui?.expanded) state.expanded = new Set(shared.ui.expanded);
     buildViewButtons();
     markExternal("shared link");
@@ -224,7 +243,10 @@ export async function start(): Promise<void> {
     return;
   }
 
-  const wanted = new URLSearchParams(location.search).get("doc");
+  const params = new URLSearchParams(location.search);
+  const asked = params.get("layout");
+  if (isLayout(asked)) state.layout = asked;
+  const wanted = params.get("doc");
   const first = state.index.find((d) => d.id === wanted) ?? state.index[state.index.length - 1];
   if (first) {
     picker.value = first.id;
@@ -328,10 +350,45 @@ function renderAll(): void {
           ? renderWorkflowOverview(graph, state.blurb)
           : "";
 
+  renderLayout();
   renderBanner();
   renderLegend();
   renderGraphPane();
   renderChart();
+}
+
+/** What the loaded documents give each pane to show. */
+function available(): { workflow: boolean; plan: boolean } {
+  return { workflow: !!state.graph, plan: !!state.scene || !!state.refused };
+}
+
+/**
+ * The layout in effect: the person's choice if the pane it keeps has
+ * something in it, otherwise whatever was loaded asks for — a workflow alone
+ * opens on the workflow alone, a plan alone on the plan alone.
+ */
+function currentLayout(): Layout {
+  const has = available();
+  const chosen = state.layout;
+  if (chosen === "split" || (chosen && has[chosen])) return chosen;
+  if (has.workflow && !has.plan) return "workflow";
+  if (has.plan && !has.workflow) return "plan";
+  return "split";
+}
+
+function renderLayout(): void {
+  const layout = currentLayout();
+  const has = available();
+  el("stack").dataset["layout"] = layout;
+  el("graph-pane").hidden = layout === "plan";
+  el("plan-pane").hidden = layout === "workflow";
+  el("splitter").hidden = layout !== "split";
+  for (const b of el("layouts").querySelectorAll<HTMLButtonElement>("[data-layout]")) {
+    const id = b.dataset["layout"] as Layout;
+    b.setAttribute("aria-pressed", String(id === layout));
+    // A pane on its own with nothing in it is not a layout worth offering.
+    b.disabled = id !== "split" && !has[id];
+  }
 }
 
 function renderGraphPane(): void {
@@ -367,7 +424,9 @@ function renderGraphPane(): void {
 
 function fitGraph(attempt = 0): void {
   const graph = state.graph;
-  if (!graph) return;
+  // A hidden pane measures zero; fitting to that would shrink the graph to the
+  // floor. Switching the pane back on fits it then.
+  if (!graph || el("graph-pane").hidden) return;
   const box = el("graph-scroll");
 
   // Fitting against a box the browser has not laid out yet produces a postage
@@ -515,6 +574,21 @@ function markExternal(label: string): void {
 
 /* ── controls ──────────────────────────────────────────────────────────── */
 
+function buildLayoutButtons(): void {
+  el("layouts").innerHTML = LAYOUTS.map(
+    (l) => `<button data-layout="${l.id}" title="${escapeHtml(l.hint)}" aria-pressed="false">${l.label}</button>`,
+  ).join("");
+}
+
+/** A chosen layout is part of the address, so a link can open on it. */
+function rememberLayout(layout: Layout | undefined): void {
+  state.layout = layout;
+  const url = new URL(location.href);
+  if (layout) url.searchParams.set("layout", layout);
+  else url.searchParams.delete("layout");
+  history.replaceState(null, "", url);
+}
+
 function buildViewButtons(): void {
   el("views").innerHTML = GANTT_VIEWS.map(
     (v) =>
@@ -532,9 +606,19 @@ function wireControls(): void {
     renderChart();
   });
 
+  el("layouts").addEventListener("click", (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-layout]");
+    if (!button || button.disabled) return;
+    rememberLayout(button.dataset["layout"] as Layout);
+    renderAll();
+    fitGraph();
+  });
+
   el<HTMLSelectElement>("dataset").addEventListener("change", (e) => {
     const id = (e.target as HTMLSelectElement).value;
     if (id === DROPPED) return;
+    // Another document set decides its own layout again.
+    rememberLayout(undefined);
     void loadDataset(id).then(() => fitGraph());
   });
 
@@ -608,7 +692,11 @@ function wireControls(): void {
         ...(raw.plan ? { plan: raw.plan } : {}),
         ...(raw.workflow ? { workflow: raw.workflow } : {}),
         ...(raw.environment ? { environment: raw.environment } : {}),
-        ui: { view: state.view, expanded: [...state.expanded] },
+        ui: {
+          view: state.view,
+          expanded: [...state.expanded],
+          ...(state.layout ? { layout: state.layout } : {}),
+        },
       },
       flash,
       (headline, detail) => showBanner(headline, [escapeHtml(detail)]),
@@ -779,6 +867,7 @@ async function acceptFiles(files: readonly File[]): Promise<void> {
     return;
   }
 
+  rememberLayout(undefined);
   state.gate = gate;
   state.refused = doc ? undefined : refused;
   state.selected = undefined;

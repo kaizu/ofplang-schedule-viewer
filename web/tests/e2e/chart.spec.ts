@@ -374,6 +374,12 @@ test.describe("a workflow on its own", () => {
     await dropWorkflow(page);
 
     await expect(page.locator("#graph g.gnode")).toHaveCount(9); // main plus eight steps
+    // A workflow alone opens on the workflow alone (D46)…
+    await expect(page.locator("#plan-pane")).toBeHidden();
+    await expect(page.locator('#layouts [data-layout="workflow"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator('#layouts [data-layout="plan"]')).toBeDisabled();
+    // …and asked for both, the plan pane says why it is empty.
+    await page.locator('#layouts [data-layout="split"]').click();
     await expect(page.locator("#plan-empty")).toBeVisible();
     await expect(page.locator("#chart")).toBeHidden();
 
@@ -413,7 +419,79 @@ test.describe("a workflow on its own", () => {
     const url = await page.evaluate(() => navigator.clipboard.readText());
     await page.goto(url);
     await expect(page.locator("#graph g.gnode")).toHaveCount(9);
-    await expect(page.locator("#plan-empty")).toBeVisible();
+    await expect(page.locator("#plan-pane")).toBeHidden();
+  });
+});
+
+test.describe("which panes are on screen (D46)", () => {
+  const heights = async (page: Page) =>
+    page.evaluate(() => {
+      const h = (id: string): number => document.getElementById(id)!.getBoundingClientRect().height;
+      return { stack: h("stack"), graph: h("graph-pane"), plan: h("plan-pane") };
+    });
+
+  test("a plan with its workflow opens on both, split", async ({ page }) => {
+    await open(page, "plate_batch");
+    await expect(page.locator('#layouts [data-layout="split"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#splitter")).toBeVisible();
+    const h = await heights(page);
+    expect(h.graph).toBeGreaterThan(80);
+    expect(h.plan).toBeGreaterThan(80);
+  });
+
+  test("one pane on its own takes the whole column, and the other is gone", async ({ page }) => {
+    await open(page, "plate_batch");
+    for (const [layout, shown, gone] of [
+      ["plan", "plan", "graph"],
+      ["workflow", "graph", "plan"],
+    ] as const) {
+      await page.locator(`#layouts [data-layout="${layout}"]`).click();
+      await expect(page.locator(`#${gone}-pane`)).toBeHidden();
+      await expect(page.locator("#splitter")).toBeHidden();
+      const h = await heights(page);
+      expect(Math.abs(h[shown] - h.stack), layout).toBeLessThan(2);
+      expect(new URL(page.url()).searchParams.get("layout")).toBe(layout);
+    }
+    // The workflow alone is fitted to the room it now has, not left at the
+    // size it had in half the column.
+    const box = await page.locator("#graph").boundingBox();
+    expect(box!.height).toBeGreaterThan(250);
+  });
+
+  test("the plan alone still draws every lane, and back to both restores the split", async ({ page }) => {
+    await open(page, "plate_batch");
+    const before = await page.locator("#gutter text.lane-label").count();
+    await page.locator('#layouts [data-layout="plan"]').click();
+    await expect(page.locator("#gutter text.lane-label")).toHaveCount(before);
+    await page.locator('#layouts [data-layout="split"]').click();
+    await expect(page.locator("#splitter")).toBeVisible();
+    const h = await heights(page);
+    expect(h.graph).toBeGreaterThan(80);
+    expect(h.plan).toBeGreaterThan(80);
+  });
+
+  test("a chosen layout survives a reload, and another plan decides its own", async ({ page }) => {
+    await page.goto("/?doc=plate_batch&layout=plan");
+    await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+    await expect(page.locator("#graph-pane")).toBeHidden();
+
+    await page.locator("#dataset").selectOption("simple");
+    await expect.poll(() => new URL(page.url()).searchParams.get("doc")).toBe("simple");
+    expect(new URL(page.url()).searchParams.get("layout")).toBeNull();
+    await expect(page.locator("#graph-pane")).toBeVisible();
+    await expect(page.locator("#plan-pane")).toBeVisible();
+  });
+
+  test("a shared link reopens on the layout it was copied from", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await open(page, "plate_batch");
+    await page.locator('#layouts [data-layout="plan"]').click();
+    await page.locator("#share").click();
+    await expect(page.locator("#status-selection")).toContainText("Link copied");
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    await page.goto(url.replace(/\?[^#]*/, ""));
+    await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+    await expect(page.locator("#graph-pane")).toBeHidden();
   });
 });
 

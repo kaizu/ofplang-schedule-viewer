@@ -111,6 +111,22 @@ test("a joint plan, dropped, and refused with its reason (D42)", async ({ page }
   await shot(page, "gate.joint-plan");
 });
 
+test("one pane on its own (D46)", async ({ page }) => {
+  await page.goto("/?doc=plate_batch&layout=workflow");
+  await page.locator("#graph g.gnode").first().waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  await shot(page, "layout.workflow");
+  await page.locator('#layouts [data-layout="plan"]').click();
+  await settle(page);
+  await shot(page, "layout.plan");
+
+  // The rail carries the layout switch and the link now; it must still fit
+  // where the inspector has already folded away.
+  await page.setViewportSize({ width: 960, height: 700 });
+  await page.waitForTimeout(300); // the chart redraws on a debounced resize
+  await shot(page, "layout.narrow");
+});
+
 test("the feature gate, refusing something it cannot draw", async ({ page }) => {
   await page.goto("/?doc=plate_batch");
   await settle(page);

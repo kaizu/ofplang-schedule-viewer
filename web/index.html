@@ -23,6 +23,9 @@
         <label class="lg" for="dataset">Plan</label>
         <select id="dataset" aria-label="Plan"></select>
 
+        <div class="seg" id="layouts" role="group" aria-label="Panes"></div>
+        <button id="share">Copy link</button>
+
         <div class="readouts">
           <div class="readout"><span class="k">Outcome</span><span class="v" id="ro-outcome">—</span></div>
           <div class="readout"><span class="k">Makespan</span><span class="v num" id="ro-makespan">—</span></div>
@@ -37,7 +40,7 @@
 
       <main>
         <div class="stack" id="stack">
-        <section class="pane">
+        <section class="pane" id="graph-pane">
           <div class="pane-hd">
             <h2>Workflow</h2>
             <span class="hint" id="graph-hint"></span>
@@ -62,7 +65,7 @@
           tabindex="0"
         ></div>
 
-        <section class="pane">
+        <section class="pane" id="plan-pane">
           <div class="pane-hd">
             <h2>Execution plan</h2>
             <div class="seg" id="views" role="group" aria-label="View"></div>
@@ -75,7 +78,6 @@
               <button id="zoom-in" aria-label="Zoom in">+</button>
             </div>
             <button id="export">Export SVG</button>
-            <button id="share">Copy link</button>
           </div>
 
           <div class="banner" id="banner" hidden></div>
