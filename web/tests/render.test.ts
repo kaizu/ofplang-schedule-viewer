@@ -9,12 +9,17 @@
 import { describe, expect, it } from "vitest";
 
 import { deviceOf } from "../src/model/common";
+import { traceObjects } from "../src/model/objects";
 import { buildScene } from "../src/model/scene";
 import { GANTT_VIEWS, activityLabel, ganttLayout } from "../src/layout/gantt";
 import { makeScale, niceStep, unitAbbrev } from "../src/layout/scale";
-import { readEnvironmentText, readExecutionDocumentText } from "../src/read";
+import { readEnvironmentText, readExecutionDocumentText, readWorkflowText } from "../src/read";
 import { renderGantt } from "../src/view/gantt";
 import { documentFiles, read, triples } from "./golden/corpus";
+
+/** The views with a bar for every activity. The Object view has one for
+ *  every activity an Object takes part in, and is tested on its own. */
+const ACTIVITY_VIEWS = GANTT_VIEWS.filter((v) => v.id !== "object");
 
 const plateBatch = (() => {
   const t = triples.find((x) => x.name === "plate_batch")!;
@@ -89,15 +94,15 @@ describe("the other views", () => {
     expect(bars).toHaveLength(plateBatch.activities.length);
   });
 
-  it("every view covers every activity and stays inside its lanes", () => {
-    for (const view of GANTT_VIEWS) {
+  it("every activity view covers every activity and stays inside its lanes", () => {
+    for (const view of ACTIVITY_VIEWS) {
       for (const [dir, name] of documentFiles) {
         const scene = buildScene(readExecutionDocumentText(read(dir, name)));
         const { lanes, bars } = ganttLayout(scene, view.id);
         for (const b of bars) {
           expect(b.lane, `${name}/${view.id}`).toBeGreaterThanOrEqual(0);
           expect(b.lane, `${name}/${view.id}`).toBeLessThan(lanes.length);
-          expect(scene.activities[b.index], `${name}/${view.id}`).toBeDefined();
+          expect(scene.activities[b.index!], `${name}/${view.id}`).toBeDefined();
         }
         const covered = new Set(bars.map((b) => b.index));
         expect(covered.size, `${name}/${view.id} misses activities`).toBe(scene.activities.length);
@@ -279,7 +284,7 @@ describe("holding without accessing (§4.4.2) — storage", () => {
   });
 
   it("draws a resting step hollow in every view", () => {
-    for (const view of GANTT_VIEWS) {
+    for (const view of ACTIVITY_VIEWS) {
       const { bars } = ganttLayout(scene, view.id);
       for (const { i } of chills) {
         const mine = bars.filter((b) => b.index === i);
@@ -360,5 +365,73 @@ activities:
     const { lanes, bars } = ganttLayout(scene, "device");
     expect(bars.map((b) => [lanes[b.lane]!.id, b.style])).toEqual([["hotel", "transport"]]);
     expect(scene.machines.find((m) => m.id === "hotel")!.occupancy).toBe(1);
+  });
+});
+
+describe("the Object view (design.md §23)", () => {
+  const withWorkflow = (name: string) => {
+    const t = triples.find((x) => x.name === name)!;
+    return buildScene(
+      readExecutionDocumentText(read(...t.plan)),
+      readEnvironmentText(read(...t.environment)),
+      readWorkflowText(read(...t.workflow)),
+    );
+  };
+
+  it("one lane per Object: its origin as the label, its type as the tag (D58)", () => {
+    const { lanes } = ganttLayout(withWorkflow("storage"), "object");
+    expect(lanes.map((l) => [l.label, l.tag])).toEqual([
+      ["PrepA.plate", "Plate"],
+      ["PrepB.plate", "Plate"],
+      ["PrepC.plate", "Plate"],
+    ]);
+  });
+
+  it("a bar for every stretch of every lifeline, in its Object's lane", () => {
+    for (const t of triples) {
+      const scene = withWorkflow(t.name);
+      const tracing = traceObjects(scene);
+      if (!tracing.ok) throw new Error(`${t.name}: ${tracing.reasons.join("; ")}`);
+      const { lanes, bars } = ganttLayout(scene, "object");
+      expect(bars, t.name).toHaveLength(tracing.traces.reduce((n, x) => n + x.segments.length, 0));
+      for (const b of bars) expect(lanes[b.lane]!.id, t.name).toBe(b.object);
+      // Only a wait is no activity.
+      for (const b of bars) expect(b.index === undefined, t.name).toBe(b.style === "waiting");
+    }
+  });
+
+  it("a lane's bars do not overlap", () => {
+    for (const t of triples) {
+      const { lanes, bars } = ganttLayout(withWorkflow(t.name), "object");
+      lanes.forEach((_, lane) => {
+        const mine = bars.filter((b) => b.lane === lane).sort((x, y) => x.start - y.start);
+        for (let k = 1; k < mine.length; k++) expect(mine[k]!.start, t.name).toBeGreaterThanOrEqual(mine[k - 1]!.end);
+      });
+    }
+  });
+
+  it("draws nothing where the Objects cannot be told apart (D59)", () => {
+    expect(ganttLayout(plateBatch, "object")).toEqual({ lanes: [], bars: [] });
+  });
+
+  it("renders a wait as a thin line that carries its Object and no activity", () => {
+    const g = renderGantt(withWorkflow("storage"), { view: "object", baseWidth: 800, zoom: 1, lit: new Set(), showLabels: true });
+    const waits = g.plot.match(/<rect class="bar waiting"[^>]*>/g) ?? [];
+    expect(waits.length).toBeGreaterThan(0);
+    for (const w of waits) {
+      expect(w).toMatch(/data-o="create:Prep[ABC]\.plate"/);
+      expect(w).not.toMatch(/data-i=/);
+      expect(w).toMatch(/height="2"/);
+    }
+  });
+
+  it("keeps the end of a label too long for the gutter, where Objects differ", () => {
+    const g = renderGantt(withWorkflow("reformatter"), { view: "object", baseWidth: 800, zoom: 1, lit: new Set(), showLabels: true });
+    const shown = [...g.gutter.matchAll(/<text class="lane-label"[^>]*>(?:<title>([^<]*)<\/title>)?([^<]*)<\/text>/g)];
+    expect(shown).toHaveLength(12);
+    // Every lane still reads differently, and a clipped one carries its whole label.
+    expect(new Set(shown.map((m) => m[2])).size).toBe(12);
+    const clipped = shown.find((m) => m[1] === "Preparation.prep_out_a3_24")!;
+    expect(clipped[2]).toMatch(/^Prepar….*prep_out_a3_24$/);
   });
 });

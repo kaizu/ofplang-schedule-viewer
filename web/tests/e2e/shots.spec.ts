@@ -56,6 +56,25 @@ test("the three views of the big one", async ({ page }) => {
   }
 });
 
+test("the Object view (design.md §23)", async ({ page }) => {
+  for (const doc of ["storage", "reformatter", "reroute_chain_replan", "data_flow", "plate_batch"]) {
+    await page.goto(`/?doc=${doc}`);
+    await settle(page);
+    const button = page.locator('#views button[data-view="object"]');
+    if ((await button.getAttribute("aria-disabled")) === "true") {
+      // Not offered: hover it, so the shot shows the button and its reason.
+      await button.hover();
+      await shot(page, `${doc}.object.unavailable`);
+      continue;
+    }
+    await button.click();
+    for (const theme of ["light", "dark"]) {
+      await page.locator("#theme").selectOption(theme);
+      await shot(page, `${doc}.object.${theme}`);
+    }
+  }
+});
+
 test("the workflow graph, and the link between the panes", async ({ page }) => {
   await page.goto("/?doc=plate_batch");
   await settle(page);

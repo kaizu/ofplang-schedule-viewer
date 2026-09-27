@@ -113,6 +113,8 @@ export type Fate =
 export interface ObjectTrace {
   /** Stable within a plan: where the Object came from. */
   readonly id: string;
+  /** Where it appears: `PrepA.plate`, or `inputs.sample` for an entry input. */
+  readonly where: string;
   /** Type and origin, e.g. `Plate · PrepA.plate` (design.md D58). */
   readonly label: string;
   readonly type: string;
@@ -135,6 +137,15 @@ const portName = (node: NodePath, port: string): string =>
   node.length ? `${node.join(".")}.${port}` : `inputs.${port}`;
 
 class Untraceable extends Error {}
+
+const traced = new WeakMap<Scene, ObjectTracing>();
+
+/** `traceObjects`, once per scene — the button, the chart and the selection all ask. */
+export function tracingOf(scene: Scene): ObjectTracing {
+  let t = traced.get(scene);
+  if (!t) traced.set(scene, (t = traceObjects(scene)));
+  return t;
+}
 
 /**
  * Follow every Object of a plan from where it appears to where it ends.
@@ -326,7 +337,7 @@ class Tracer {
     arcs: string[],
   ): ObjectTrace {
     const activities = segments.flatMap((s) => (s.activity === undefined ? [] : [s.activity]));
-    return { id, label: type ? `${type} · ${where}` : where, type, origin, fate, segments, arcs, activities };
+    return { id, where, label: type ? `${type} · ${where}` : where, type, origin, fate, segments, arcs, activities };
   }
 
   private onlyStep(key: string, list: readonly number[] | undefined): number {

@@ -13,36 +13,55 @@
  *              concurrency at a glance.
  * - `activity` one lane per activity, in start order. Best for reading a
  *              plan step by step.
+ * - `object`   one lane per Object, from where it appears to where it ends
+ *              (design.md §23). Best for reading what happens to one plate.
+ *              Only where the Objects can be told apart (`traceObjects`).
  *
  * Pure functions over the scene: no DOM, no colours, no pixels.
  */
 
 import { deviceOf, spotNameOf } from "../model/common";
 import type { Activity } from "../model/document";
+import { tracingOf, type SegmentKind } from "../model/objects";
 import { accessesDevices, holdingDevices, type Scene } from "../model/scene";
 
-export type GanttView = "device" | "flow" | "activity";
+export type GanttView = "device" | "flow" | "activity" | "object";
 
 export const GANTT_VIEWS: readonly { id: GanttView; label: string; hint: string }[] = [
   { id: "device", label: "Device", hint: "one lane per machine — shows contention" },
   { id: "flow", label: "Flow", hint: "one lane per top-level step — shows concurrency" },
   { id: "activity", label: "Activity", hint: "one lane per activity — shows the sequence" },
+  { id: "object", label: "Object", hint: "one lane per Object — follows each from where it appears to where it ends" },
 ];
 
-/** `resting` is a step that holds its spots but not its device (§4.4.2). */
-export type BarStyle = "processing" | "resting" | "transport" | "held" | "relay" | "replenishment";
+/**
+ * `resting` is a step that holds its spots but not its device (§4.4.2);
+ * `waiting` an Object sitting on a spot between two things that happen to it.
+ */
+export type BarStyle = "processing" | "resting" | "transport" | "held" | "relay" | "replenishment" | "waiting";
 
 export interface Lane {
   readonly id: string;
   readonly label: string;
   /** A short right-aligned tag in the gutter; empty when it says nothing. */
   readonly tag: string;
+  /**
+   * Where a label too long for the gutter loses characters. `middle` keeps
+   * the end, for labels that differ only there — `Preparation.prep_out_a3_24`
+   * beside `Preparation.prep_out_rf12`.
+   */
+  readonly elide?: "middle";
 }
 
 export interface Bar {
   readonly lane: number;
-  /** Index into `scene.activities` — the identity used by the selection. */
-  readonly index: number;
+  /**
+   * Index into `scene.activities` — the identity used by the selection.
+   * Absent only on a wait in the Object view, which is no activity.
+   */
+  readonly index?: number;
+  /** The Object whose lane this is, in the Object view. */
+  readonly object?: string;
   readonly start: number;
   readonly end: number;
   readonly style: BarStyle;
@@ -62,6 +81,8 @@ export function ganttLayout(scene: Scene, view: GanttView): GanttLayout {
       return flowLayout(scene);
     case "activity":
       return activityLayout(scene);
+    case "object":
+      return objectLayout(scene);
   }
 }
 
@@ -240,6 +261,43 @@ function activityLayout(scene: Scene): GanttLayout {
     })),
   };
 }
+
+/**
+ * One lane per Object: its origin as the label, its type as the tag
+ * (design.md D58). Nothing at all where the Objects cannot be told apart —
+ * the view is not offered then (D59), and a lane pieced together would look
+ * exactly like a true one.
+ */
+function objectLayout(scene: Scene): GanttLayout {
+  const tracing = tracingOf(scene);
+  if (!tracing.ok) return { lanes: [], bars: [] };
+
+  const bars: Bar[] = [];
+  const lanes = tracing.traces.map((t, lane) => {
+    for (const s of t.segments) {
+      const a = s.activity === undefined ? undefined : scene.activities[s.activity];
+      bars.push({
+        lane,
+        ...(s.activity === undefined ? {} : { index: s.activity }),
+        object: t.id,
+        start: s.start,
+        end: s.end,
+        style: SEGMENT_STYLE[s.kind],
+        label: a ? barLabel(a) : "",
+      });
+    }
+    return { id: t.id, label: t.where, tag: t.type, elide: "middle" as const };
+  });
+  return { lanes, bars };
+}
+
+const SEGMENT_STYLE: Readonly<Record<SegmentKind, BarStyle>> = {
+  processing: "processing",
+  resting: "resting",
+  waiting: "waiting",
+  transport: "transport",
+  relay: "relay",
+};
 
 /** Short enough for the gutter, still a word. */
 const KIND_TAG: Readonly<Record<Activity["kind"], string>> = {

@@ -45,6 +45,7 @@ function chartStyle(resolve: (token: string) => string): string {
     .bar.replenishment { fill: ${v("--replenishment")} }
     .refill-plus { stroke: ${v("--on-data")}; stroke-width: 1.4; stroke-linecap: round }
     .bar.held { fill: ${v("--transport")}; fill-opacity: .42; rx: 1 }
+    .bar.waiting { fill: ${v("--muted")}; rx: 0 }
     .bar.done { opacity: .55 }
     .bar.dim { opacity: .16 }
     .bar.lit { stroke: ${v("--ink")}; stroke-width: 2 }

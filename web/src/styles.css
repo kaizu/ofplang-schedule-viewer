@@ -203,9 +203,13 @@ select:hover,
 button:hover {
   background: var(--sunken);
 }
-button:disabled {
+button:disabled,
+button[aria-disabled="true"] {
   color: var(--faint);
   cursor: default;
+}
+button[aria-disabled="true"]:hover {
+  background: transparent;
 }
 :focus-visible {
   outline: 2px solid var(--processing);
@@ -519,6 +523,13 @@ main {
   transform: rotate(45deg);
   background: var(--transport);
 }
+/* An Object sitting on a spot: a thin line in the ink, not a colour of its
+   own — nothing is being done to it, and it joins the bars that are. */
+.sw.waiting {
+  height: 2px;
+  border-radius: 0;
+  background: var(--muted);
+}
 .sw.replenishment {
   position: relative;
   background: var(--replenishment);
@@ -669,6 +680,10 @@ svg {
 }
 .bar.relay {
   fill: var(--transport);
+}
+.bar.waiting {
+  fill: var(--muted);
+  rx: 0;
 }
 .bar.held {
   /* A 4px band: at this size a hatch is illegible and a rounded outline reads

@@ -19,6 +19,7 @@ import {
   visibleFor,
   type GraphNode,
 } from "./model/graph";
+import { tracingOf } from "./model/objects";
 import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import {
   carriesLabel,
@@ -492,7 +493,6 @@ function renderAll(): void {
 
   renderLayout();
   renderBanner();
-  renderLegend();
   renderGraphPane();
   renderChart();
 }
@@ -592,7 +592,9 @@ function renderLegend(): void {
     return;
   }
   const counts = scene.metrics.counts;
-  const held = scene.activities.some((a) => a.kind === "transport" && a.transporter);
+  // The Object view draws no held devices and the only view with waits (§23).
+  const objects = state.view === "object";
+  const held = !objects && scene.activities.some((a) => a.kind === "transport" && a.transporter);
   const resting = scene.activities.some((a) => a.kind === "processing" && !accessesDevices(a, scene.env));
   const items: [boolean, string, string][] = [
     [counts.processing > 0, "processing", "processing"],
@@ -600,7 +602,8 @@ function renderLegend(): void {
     [counts.transport > 0, "transport", "transport"],
     [held, "held", "device held"],
     [counts.relay > 0, "relay", "relay"],
-    [counts.replenishment > 0, "replenishment", "refill"],
+    [objects, "waiting", "waiting on a spot"],
+    [!objects && counts.replenishment > 0, "replenishment", "refill"],
   ];
   el("legend").innerHTML = items
     .filter(([on]) => on)
@@ -620,7 +623,11 @@ function renderChart(): void {
   for (const id of ["labels", "zoom-in", "zoom-out", "zoom-fit", "export"])
     el<HTMLButtonElement>(id).disabled = !scene;
   for (const b of el("views").querySelectorAll("button")) (b as HTMLButtonElement).disabled = !scene;
-  if (!scene) return;
+  if (!scene) {
+    renderLegend();
+    return;
+  }
+  offerObjectView(scene);
 
   // Measured from the pane, never from the scrolling row: the row is sized by
   // what is inside it, so measuring there feeds each zoom back into the next
@@ -652,6 +659,8 @@ function renderChart(): void {
   plot.setAttribute("width", String(g.width));
   plot.setAttribute("height", String(g.height));
   plot.innerHTML = g.plot;
+  // After the view is settled: the legend names what this view draws.
+  renderLegend();
 }
 
 const findingLine = (f: Finding): string =>
@@ -739,6 +748,32 @@ function rememberLayout(layout: Layout | undefined): void {
   history.replaceState(null, "", url);
 }
 
+/**
+ * The Object view only where the Objects can be told apart (design.md D59).
+ * Marked unavailable rather than `disabled`, so the reason stays readable in
+ * its tooltip. A view asked for that cannot be drawn — by a share link, by
+ * `--gantt object`, or left over from the previous plan — falls back to Device.
+ */
+function offerObjectView(scene: Scene): void {
+  const tracing = tracingOf(scene);
+  const button = el("views").querySelector<HTMLButtonElement>('[data-view="object"]');
+  if (button) {
+    const hint = GANTT_VIEWS.find((v) => v.id === "object")!.hint;
+    if (tracing.ok) {
+      button.removeAttribute("aria-disabled");
+      button.title = hint;
+    } else {
+      button.setAttribute("aria-disabled", "true");
+      button.title = ["Not available: the Objects of this plan cannot be told apart.", ...tracing.reasons].join("\n");
+    }
+  }
+  if (state.view === "object" && !tracing.ok) {
+    state.view = "device";
+    for (const b of el("views").querySelectorAll("[data-view]"))
+      b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["view"] === state.view));
+  }
+}
+
 function buildViewButtons(): void {
   el("views").innerHTML = GANTT_VIEWS.map(
     (v) =>
@@ -749,7 +784,7 @@ function buildViewButtons(): void {
 function wireControls(): void {
   el("views").addEventListener("click", (e) => {
     const button = (e.target as HTMLElement).closest<HTMLElement>("[data-view]");
-    if (!button) return;
+    if (!button || button.getAttribute("aria-disabled") === "true") return;
     state.view = button.dataset["view"] as GanttView;
     for (const b of el("views").querySelectorAll("[data-view]"))
       b.setAttribute("aria-pressed", String(b === button));

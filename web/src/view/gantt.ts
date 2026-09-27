@@ -15,6 +15,7 @@ export const LANE_H = 27;
 const LANE_H_MAX = 44;
 const BAR_H = 13;
 const HELD_H = 4;
+const WAIT_H = 2;
 const AXIS_H = 27;
 export const GUTTER_W = 176;
 
@@ -43,6 +44,13 @@ const esc = (s: string): string =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** Clip from the middle, keeping more of the end than of the start. */
+const clipMiddle = (s: string, n: number): string => {
+  if (s.length <= n) return s;
+  const head = Math.floor((n - 1) / 3);
+  return `${s.slice(0, head)}…${s.slice(s.length - (n - 1 - head))}`;
+};
 
 /** One decimal is plenty for SVG coordinates, and keeps the markup readable. */
 const r = (n: number): number => Math.round(n * 10) / 10;
@@ -80,8 +88,11 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
       gutter.push(`<rect class="lane-alt" x="0" y="${y}" width="${GUTTER_W}" height="${laneH}"/>`);
       plot.push(`<rect class="lane-alt" x="0" y="${y}" width="${width}" height="${laneH}"/>`);
     }
+    const shown = lane.elide === "middle" ? clipMiddle(lane.label, 21) : clip(lane.label, 21);
+    // A clipped label keeps its whole text as a tooltip.
+    const whole = shown === lane.label ? "" : `<title>${esc(lane.label)}</title>`;
     gutter.push(
-      `<text class="lane-label" x="10" y="${y + laneH / 2 + 3.5}">${esc(clip(lane.label, 21))}</text>`,
+      `<text class="lane-label" x="10" y="${y + laneH / 2 + 3.5}">${whole}${esc(shown)}</text>`,
     );
     if (lane.tag)
       gutter.push(
@@ -112,25 +123,38 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
   };
 
   for (const bar of bars) {
-    const a = scene.activities[bar.index]!;
+    const a = bar.index === undefined ? undefined : scene.activities[bar.index];
     const y = bar.lane * laneH + (laneH - BAR_H) / 2;
-    const on = !active || opts.lit.has(bar.index);
+    const isLit = bar.index !== undefined && opts.lit.has(bar.index);
+    const on = !active || isLit;
     const cls = [
       "bar",
       bar.style,
-      a.status === "completed" ? "done" : "",
-      active && opts.lit.has(bar.index) ? "lit" : "",
+      a?.status === "completed" ? "done" : "",
+      active && isLit ? "lit" : "",
       active && !on ? "dim" : "",
     ]
       .filter(Boolean)
       .join(" ");
+    const ids = `${bar.index === undefined ? "" : ` data-i="${bar.index}"`}${bar.object ? ` data-o="${esc(bar.object)}"` : ""}`;
 
     if (bar.style === "relay") {
       // A relay is instantaneous (§6.4.1) — a point, drawn as a small diamond.
       const cx = scale.x(bar.start);
       const cy = y + BAR_H / 2;
       plot.push(
-        `<rect class="${cls}" data-i="${bar.index}" x="${cx - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${cx} ${cy})"/>`,
+        `<rect class="${cls}"${ids} x="${cx - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${cx} ${cy})"/>`,
+      );
+      continue;
+    }
+
+    if (bar.style === "waiting") {
+      // An Object sitting on a spot: a thin line joining what happens to it, so
+      // a lane reads as one life rather than as unrelated bars.
+      const x0 = scale.x(bar.start);
+      const x1 = scale.x(bar.end);
+      plot.push(
+        `<rect class="${cls}"${ids} x="${x0}" y="${y + BAR_H / 2 - WAIT_H / 2}" width="${Math.max(0, x1 - x0)}" height="${WAIT_H}"/>`,
       );
       continue;
     }
@@ -144,7 +168,7 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
     // competing with the work itself.
     const h = held ? HELD_H : BAR_H;
     plot.push(
-      `<rect class="${cls}" data-i="${bar.index}" x="${x0 + 1}" y="${held ? y + BAR_H - HELD_H : y}" width="${w}" height="${h}"/>`,
+      `<rect class="${cls}"${ids} x="${x0 + 1}" y="${held ? y + BAR_H - HELD_H : y}" width="${w}" height="${h}"/>`,
     );
 
     if (bar.style === "replenishment") {
