@@ -221,6 +221,9 @@ function litNodes(): Highlight {
     return { lit, onPath, subtree: sel.key };
   }
   if (sel.kind === "object") {
+    // One activity picked within it (D62): the graph shows that activity
+    // alone, as every other view's selection does (D63).
+    if (sel.index !== undefined) return activityHighlight(graph, scene, sel.index);
     // The steps it passes through light, and the chain of connections that
     // carries it — at every depth, so opening a composite keeps the chain.
     const trace = selectedTrace();
@@ -241,47 +244,56 @@ function litNodes(): Highlight {
     for (const k of lit) onPath.delete(k);
     return { lit, onPath, edges };
   }
-  if (scene) {
-    const activity = scene.activities[sel.index];
-    if (activity) {
-      const paths =
-        activity.kind === "processing"
-          ? [activity.node]
-          : activity.kind === "transport" || activity.kind === "relay"
-            ? [activity.arc.from.node, activity.arc.to.node]
-            : [];
-      for (const path of paths) {
-        const key = visibleFor(graph, path, state.expanded);
-        if (key !== undefined) lit.add(key);
-        for (const k of ancestorKeys(path)) onPath.add(k);
-      }
+  return activityHighlight(graph, scene, sel.index);
+}
 
-      // A move serves one arc. Trace the connections it runs along, so they
-      // light rather than everything that happens to touch either end. With a
-      // composite open that is several — into its border, then down to the
-      // step inside (D61); comparing only the two visible ends found none.
-      if (activity.kind === "transport" || activity.kind === "relay") {
-        const route = arcRoute(graph, activity.arc);
-        if (route) {
-          for (const k of lit) onPath.delete(k);
-          return { lit, onPath, edges: new Set(route.map(edgeKey)) };
-        }
-        // Not this workflow's arc: fall back to the two ends as drawn.
-        const fromKey = visibleFor(graph, activity.arc.from.node, state.expanded);
-        const toKey = visibleFor(graph, activity.arc.to.node, state.expanded);
-        if (fromKey !== undefined && toKey !== undefined) {
-          for (const k of lit) onPath.delete(k);
-          return {
-            lit,
-            onPath,
-            arc: {
-              fromKey,
-              fromPort: activity.arc.from.port,
-              toKey,
-              toPort: activity.arc.to.port,
-            },
-          };
-        }
+/**
+ * What one activity lights in the graph: the box it runs in, or — for a move —
+ * the connections its arc runs along. Used by a plain activity selection and
+ * by an activity picked within an Object (D63), which lights the same.
+ */
+function activityHighlight(graph: GraphNode, scene: Scene | undefined, index: number): Highlight {
+  const lit = new Set<string>();
+  const onPath = new Set<string>();
+  const activity = scene?.activities[index];
+  if (activity) {
+    const paths =
+      activity.kind === "processing"
+        ? [activity.node]
+        : activity.kind === "transport" || activity.kind === "relay"
+          ? [activity.arc.from.node, activity.arc.to.node]
+          : [];
+    for (const path of paths) {
+      const key = visibleFor(graph, path, state.expanded);
+      if (key !== undefined) lit.add(key);
+      for (const k of ancestorKeys(path)) onPath.add(k);
+    }
+
+    // A move serves one arc. Trace the connections it runs along, so they
+    // light rather than everything that happens to touch either end. With a
+    // composite open that is several — into its border, then down to the
+    // step inside (D61); comparing only the two visible ends found none.
+    if (activity.kind === "transport" || activity.kind === "relay") {
+      const route = arcRoute(graph, activity.arc);
+      if (route) {
+        for (const k of lit) onPath.delete(k);
+        return { lit, onPath, edges: new Set(route.map(edgeKey)) };
+      }
+      // Not this workflow's arc: fall back to the two ends as drawn.
+      const fromKey = visibleFor(graph, activity.arc.from.node, state.expanded);
+      const toKey = visibleFor(graph, activity.arc.to.node, state.expanded);
+      if (fromKey !== undefined && toKey !== undefined) {
+        for (const k of lit) onPath.delete(k);
+        return {
+          lit,
+          onPath,
+          arc: {
+            fromKey,
+            fromPort: activity.arc.from.port,
+            toKey,
+            toPort: activity.arc.to.port,
+          },
+        };
       }
     }
   }

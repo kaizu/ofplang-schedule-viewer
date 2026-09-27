@@ -656,6 +656,23 @@ test.describe("the Object view picks in two steps (D62)", () => {
     await expect(inspector(page)).toHaveText("object");
   });
 
+  test("the graph follows: the whole chain for the Object, one move for the move (D63)", async ({ page }) => {
+    const move = page.locator(`#plot rect.bar.transport${B}`).first();
+    await move.click();
+    // The Object: PrepB, ChillB and ReadB, and the two connections between them.
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(3);
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(2);
+
+    await move.click();
+    // Its first move alone, as in every other view: PrepB to ChillB.
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(2);
+    await expect(page.locator('#graph g.gnode.lit[data-key="ReadB"]')).toHaveCount(0);
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(1);
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(2);
+  });
+
   test("a bar of another lane picks that Object, not an activity", async ({ page }) => {
     await page.locator(`#plot rect.bar.resting${B}`).click();
     await page.locator('#plot rect.bar.resting[data-o="create:PrepC.plate"]').click();
