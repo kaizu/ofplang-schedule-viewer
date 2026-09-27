@@ -27,10 +27,15 @@ export interface GraphNode {
   readonly kind: "atomic" | "composite";
   readonly inputs: readonly string[];
   readonly outputs: readonly string[];
+  /** Declared type of each port, as written (`Plate`, `Float`, `Float[s]`). */
+  readonly inputTypes: Readonly<Record<string, string>>;
+  readonly outputTypes: Readonly<Record<string, string>>;
   /** This node's own inbound bindings, by the port they land on. */
   readonly bindings: Readonly<Record<string, Binding>>;
   /** A composite's outputs, by the child port each is returned from. */
   readonly returns: Readonly<Record<string, string>>;
+  /** Whether each returned output carries an Object, from its declared type. */
+  readonly returnsObject: Readonly<Record<string, boolean>>;
   readonly children: readonly GraphNode[];
   /** Atomic steps at or below this node — the badge on a closed composite. */
   readonly atomicCount: number;
@@ -46,11 +51,15 @@ export function buildGraph(wf: Workflow): GraphNode {
     const def = wf.processes[process];
     const inputs = Object.keys(def?.inputs ?? {});
     const outputs = Object.keys(def?.outputs ?? {});
+    const typesOf = (ports: Readonly<Record<string, { type: string }>> | undefined) =>
+      Object.fromEntries(Object.entries(ports ?? {}).map(([p, d]) => [p, d.type]));
+    const inputTypes = typesOf(def?.inputs);
+    const outputTypes = typesOf(def?.outputs);
 
     if (!def || def.kind === "atomic") {
       return {
         id, path, key: pathKey(path), process,
-        kind: "atomic", inputs, outputs, bindings, returns: {},
+        kind: "atomic", inputs, outputs, inputTypes, outputTypes, bindings, returns: {}, returnsObject: {},
         children: [], atomicCount: 1,
       };
     }
@@ -63,16 +72,36 @@ export function buildGraph(wf: Workflow): GraphNode {
     });
 
     const returns: Record<string, string> = {};
-    for (const [port, src] of Object.entries(def.body.returns)) returns[port] = src.from;
+    const returnsObject: Record<string, boolean> = {};
+    for (const [port, src] of Object.entries(def.body.returns)) {
+      returns[port] = src.from;
+      // `returns` does not split Object from Pure Data the way a node's
+      // `state` / `data` does, so the declared type decides. An output whose
+      // type is unknown stays an Object, as it was drawn before types were read.
+      const type = outputTypes[port];
+      returnsObject[port] = type === undefined ? true : carriesObject(type, wf);
+    }
 
     return {
       id, path, key: pathKey(path), process,
-      kind: "composite", inputs, outputs, bindings, returns, children,
+      kind: "composite", inputs, outputs, inputTypes, outputTypes, bindings, returns, returnsObject, children,
       atomicCount: children.reduce((n, c) => n + c.atomicCount, 0),
     };
   };
 
   return make([], wf.entry, wf.entry, {});
+}
+
+/**
+ * Whether a declared type carries an Object: it names a type the workflow
+ * declares with `domain: object` (workflow spec: `types`). Built-in primitives
+ * (`Int`, `Float`, `String`, …) are Pure Data; so is anything the workflow does
+ * not declare. `Array<Plate>` carries Plates, so it counts. A unit suffix
+ * (`Float[mg/mL]`) is dropped first: a unit atom may share a type's name.
+ */
+export function carriesObject(type: string, wf: Pick<Workflow, "types">): boolean {
+  const names = type.replace(/\[[^\]]*\]/g, "").match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
+  return names.some((name) => wf.types[name]?.domain === "object");
 }
 
 /** Find a node by its index key. */

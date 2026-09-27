@@ -277,6 +277,8 @@ test.describe("the two panes are linked", () => {
     for (const cls of await lit.evaluateAll((els) => els.map((e) => e.getAttribute("class") ?? "")))
       expect(cls).toMatch(/transport|held|relay/);
     await expect(page.locator("#inspector")).toContainText("source.plate_1 → b1.plate");
+    // What it carries is named by its declared type, not only by its kind.
+    await expect(page.locator("#inspector")).toContainText("Plate (an Object)");
 
     // Picking it again puts it down.
     await page.locator('#graph .edge-hit[data-from="source"][data-to="b1"]').click();

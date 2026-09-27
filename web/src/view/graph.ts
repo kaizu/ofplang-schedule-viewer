@@ -110,7 +110,10 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
       const d = `M ${r(e.from.x)} ${r(e.from.y)} C ${r(e.from.x + dx)} ${r(e.from.y)}, ${r(e.to.x - dx)} ${r(e.to.y)}, ${r(e.to.x)} ${r(e.to.y)}`;
       return (
         `<path class="edge-hit" d="${d}" data-from="${esc(e.fromKey)}" data-from-port="${esc(e.fromPort)}" ` +
-        `data-to="${esc(e.toKey)}" data-to-port="${esc(e.toPort)}" data-object="${e.object}"/>`
+        `data-to="${esc(e.toKey)}" data-to-port="${esc(e.toPort)}" data-object="${e.object}"` +
+        (e.fromType !== undefined ? ` data-from-type="${esc(e.fromType)}"` : "") +
+        (e.toType !== undefined ? ` data-to-type="${esc(e.toType)}"` : "") +
+        `/>`
       );
     })
     .join("");

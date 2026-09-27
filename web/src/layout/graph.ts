@@ -52,6 +52,9 @@ export interface LaidEdge {
   readonly fromPort: string;
   readonly toKey: string;
   readonly toPort: string;
+  /** Declared types at either end, as written. Normally the same; shown apart if not. */
+  readonly fromType?: string;
+  readonly toType?: string;
 }
 
 export interface GraphLayout {
@@ -114,17 +117,23 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
 
         let from: Anchor | undefined;
         let fromKey: string;
+        // Typed here, where it is known which side of which box the port is on:
+        // a box may have an input and an output of the same name (`plate`).
+        let fromType: string | undefined;
         if (head === "inputs") {
           // The container's own inbound port, on its left border.
           from = laid.inputs.find((a) => a.port === tail);
           fromKey = laid.key;
+          fromType = s.node.inputTypes[tail];
         } else {
           const src = byId.get(head);
           if (!src) continue;
           from = anchorsOf(src).outputs.find((a) => a.port === tail);
           fromKey = src.sized.node.key;
+          fromType = src.sized.node.outputTypes[tail];
         }
         if (!from) continue;
+        const toType = p.sized.node.inputTypes[port];
         edges.push({
           from: { x: from.x, y: from.y },
           to: { x: to.x, y: to.y },
@@ -133,6 +142,8 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
           fromPort: from.port,
           toKey: p.sized.node.key,
           toPort: port,
+          ...(fromType !== undefined ? { fromType } : {}),
+          ...(toType !== undefined ? { toType } : {}),
         });
       }
     }
@@ -146,14 +157,18 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
       if (!src || !to) continue;
       const from = anchorsOf(src).outputs.find((a) => a.port === source.slice(dot + 1));
       if (!from) continue;
+      const fromType = src.sized.node.outputTypes[from.port];
+      const toType = s.node.outputTypes[port];
       edges.push({
         from: { x: from.x, y: from.y },
         to: { x: to.x, y: to.y },
-        object: true,
+        object: s.node.returnsObject[port] ?? true,
         fromKey: src.sized.node.key,
         fromPort: from.port,
         toKey: laid.key,
         toPort: port,
+        ...(fromType !== undefined ? { fromType } : {}),
+        ...(toType !== undefined ? { toType } : {}),
       });
     }
 

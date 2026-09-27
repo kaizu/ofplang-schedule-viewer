@@ -19,6 +19,7 @@ import {
 } from "./model/graph";
 import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import {
+  carriesLabel,
   copyShareLink,
   edgeLabel,
   el,
@@ -477,7 +478,7 @@ function renderAll(): void {
 
   el("inspector").innerHTML =
     sel?.kind === "edge"
-      ? renderEdgeDetail(edgeLabel(sel), sel.object, scene, movesOn(sel))
+      ? renderEdgeDetail(edgeLabel(sel), carriesLabel(sel), sel.object, scene, movesOn(sel))
       : sel?.kind === "node" && graph
       ? renderNodeDetail(graph, sel.key, scene)
       : scene

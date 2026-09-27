@@ -33,6 +33,9 @@ export interface EdgeRef {
   readonly toKey: string;
   readonly toPort: string;
   readonly object: boolean;
+  /** Declared types at either end, when the workflow says. */
+  readonly fromType?: string;
+  readonly toType?: string;
 }
 
 export interface GraphHandlers {
@@ -53,7 +56,23 @@ const edgeAt = (target: EventTarget | null): EdgeRef | undefined => {
     toKey: d["to"] ?? "",
     toPort: d["toPort"] ?? "",
     object: d["object"] === "true",
+    ...(d["fromType"] !== undefined ? { fromType: d["fromType"] } : {}),
+    ...(d["toType"] !== undefined ? { toType: d["toType"] } : {}),
   };
+};
+
+/**
+ * What an edge carries, in words: its declared type and whether that is an
+ * Object or Pure Data. The two ends normally agree; where they do not (a
+ * generic, a document that does not validate) both are shown.
+ */
+export const carriesLabel = (e: EdgeRef): string => {
+  const kind = e.object ? "an Object" : "Pure Data";
+  const { fromType, toType } = e;
+  if (fromType === undefined && toType === undefined) return kind;
+  if (fromType === undefined || toType === undefined || fromType === toType)
+    return `${fromType ?? toType} (${kind})`;
+  return `${fromType} → ${toType} (${kind})`;
 };
 
 export const edgeLabel = (e: EdgeRef): string =>
@@ -95,7 +114,7 @@ export function wireGraphPointer(handlers: GraphHandlers): void {
     if (edge) {
       tip.innerHTML =
         `<div class="tt">${escapeHtml(edgeLabel(edge))}</div>` +
-        `<div class="tl">${edge.object ? "carries an Object" : "Pure Data"} · click to trace it</div>`;
+        `<div class="tl">carries ${escapeHtml(carriesLabel(edge))} · click to trace it</div>`;
       placeTip(tip, e);
       return;
     }

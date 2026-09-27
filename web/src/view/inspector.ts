@@ -215,12 +215,14 @@ function detail(scene: Scene, index: number): string {
 /** A selected connection in the graph: what it joins, and what the plan moves along it. */
 export function renderEdgeDetail(
   label: string,
+  carries: string,
   object: boolean,
   scene: Scene | undefined,
   moves: readonly number[],
 ): string {
   const out = [`<div><h3>connection</h3><div class="lead">${esc(label)}</div></div>`];
-  const rows: (readonly [string, unknown])[] = [["carries", object ? "an Object" : "Pure Data"]];
+  // `carries` names the declared type as well as its kind: `Plate (an Object)`, `Float (Pure Data)`.
+  const rows: (readonly [string, unknown])[] = [["carries", carries]];
   if (scene) rows.push(["moves", object ? moves.length : "— (Pure Data is a dependency, not a move)"]);
   out.push(block("Dataflow", dl(rows)));
   if (scene && moves.length) {

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ancestorKeys, buildGraph, compositeKeys, findNode, visibleFor } from "../src/model/graph";
+import { ancestorKeys, buildGraph, carriesObject, compositeKeys, findNode, visibleFor } from "../src/model/graph";
 import { layoutGraph, type LaidNode } from "../src/layout/graph";
 import { readWorkflowText } from "../src/read";
 import { read, triples } from "./golden/corpus";
@@ -191,5 +191,73 @@ describe("a wide fan-out", () => {
     expect(new Set(ys).size).toBe(3);
     // Three distinct senders, each arriving at its own port.
     expect(new Set(inbound.map((e) => e.fromKey)).size).toBe(3);
+  });
+});
+
+describe("what an edge carries", () => {
+  // The pinned examples only ever carry Objects (Plate, Sample), so the Pure
+  // Data side is written out here: a measurement returned as a Float, and a
+  // unit-suffixed Float whose unit shares a name with an object type.
+  const wf = readWorkflowText(`
+spec_version: "0.0"
+types:
+  Plate: { domain: object }
+  ms: { domain: object }
+processes:
+  read:
+    kind: atomic
+    inputs:  { plate: { type: Plate, phase: data } }
+    outputs: { plate: { type: Plate, phase: data }, od: { type: Float, phase: data }, t: { type: "Float[ms]", phase: data } }
+  log:
+    kind: atomic
+    inputs:  { value: { type: Float, phase: data } }
+  assay:
+    kind: composite
+    inputs:  { plate: { type: Plate, phase: data } }
+    outputs: { plate: { type: Plate, phase: data }, od: { type: Float, phase: data }, t: { type: "Float[ms]", phase: data } }
+    body:
+      nodes:
+        - id: Read
+          process: read
+          state: { plate: { from: inputs.plate } }
+        - id: Log
+          process: log
+          data: { value: { from: Read.od } }
+      returns:
+        plate: { from: Read.plate }
+        od: { from: Read.od }
+        t: { from: Read.t }
+entry: assay
+`);
+  const graph = buildGraph(wf);
+  const { edges } = layoutGraph(graph, new Set());
+  const edge = (fromPort: string, toKey: string, toPort: string) =>
+    edges.find((e) => e.fromPort === fromPort && e.toKey === toKey && e.toPort === toPort)!;
+
+  it("names the declared type at both ends", () => {
+    const plateIn = edge("plate", "Read", "plate");
+    expect([plateIn.fromType, plateIn.toType, plateIn.object]).toEqual(["Plate", "Plate", true]);
+    const od = edge("od", "Log", "value");
+    expect([od.fromType, od.toType, od.object]).toEqual(["Float", "Float", false]);
+  });
+
+  it("types a port by its side, when a box has an input and an output of one name", () => {
+    // `Read` has `plate` in and `plate` out; the returned one is the output.
+    const back = edge("plate", "", "plate");
+    expect(back.fromKey).toBe("Read");
+    expect(back.fromType).toBe("Plate");
+  });
+
+  it("takes a returned output's kind from its type, not a fixed Object", () => {
+    expect(edge("plate", "", "plate").object).toBe(true);
+    expect(edge("od", "", "od").object).toBe(false);
+  });
+
+  it("does not read a unit suffix as a type name", () => {
+    const t = edge("t", "", "t");
+    expect(t.fromType).toBe("Float[ms]");
+    expect(t.object).toBe(false);
+    expect(carriesObject("Array<Plate>", wf)).toBe(true);
+    expect(carriesObject("Int", wf)).toBe(false);
   });
 });
