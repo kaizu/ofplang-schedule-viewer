@@ -30,8 +30,17 @@ jobs:
       - run: npm test
         working-directory: web
 
-      - run: npm run build
+      # The Pages build, then the same build folded into one file: the viewer
+      # template the Python CLI will carry (design.md D48). Kept for every run
+      # so any commit's template can be picked up.
+      - run: npm run build:single
         working-directory: web
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer-template
+          path: web/dist-single/viewer.html
+          retention-days: 90
 
   browser:
     # Layout is the one thing the unit tests cannot see (dev-notes D26).

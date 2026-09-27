@@ -269,6 +269,14 @@ export async function start(): Promise<void> {
   wireDropTarget();
   wirePointer();
 
+  // A single-file viewer carries its documents with it and has no datasets
+  // beside it to fetch (design.md D48).
+  const embedded = document.getElementById("ofp-documents");
+  if (embedded) {
+    startEmbedded(embedded.textContent ?? "null");
+    return;
+  }
+
   try {
     const res = await fetch(new URL("datasets/index.json", document.baseURI));
     state.index = res.ok ? ((await res.json()) as DatasetIndexEntry[]) : [];
@@ -317,6 +325,62 @@ export async function start(): Promise<void> {
       ["Run <code>npm run datasets</code>, or drop a plan YAML onto this window."],
     );
   }
+}
+
+interface EmbeddedDocuments {
+  readonly name?: string;
+  readonly plan?: string;
+  readonly workflow?: string;
+  readonly environment?: string;
+}
+
+/**
+ * Open the documents a single-file viewer was written with.
+ *
+ * They are YAML text, as written, and go through the same readers as a
+ * dropped file. The link button is hidden (D48, the person's decision): a
+ * link made from a file on someone's disk points at that disk.
+ */
+function startEmbedded(json: string): void {
+  el("share").hidden = true;
+
+  let docs: EmbeddedDocuments | null;
+  let raw: { plan: unknown; workflow: unknown; environment: unknown };
+  try {
+    docs = JSON.parse(json) as EmbeddedDocuments | null;
+    raw = {
+      plan: docs?.plan ? parseYaml(docs.plan) : null,
+      workflow: docs?.workflow ? parseYaml(docs.workflow) : null,
+      environment: docs?.environment ? parseYaml(docs.environment) : null,
+    };
+  } catch (e) {
+    markExternal("(unreadable)");
+    showBanner("The documents in this file could not be read.", [escapeHtml(String(e))]);
+    return;
+  }
+
+  if (!docs || (!raw.plan && !raw.workflow)) {
+    markExternal("(no documents)");
+    renderAll();
+    showBanner("This viewer file has no documents in it.", [
+      "Drop a plan, a workflow or an environment YAML onto this window to read it.",
+    ]);
+    return;
+  }
+
+  const name = docs.name || "embedded documents";
+  try {
+    adopt(raw, name, "Embedded in this file.");
+  } catch (e) {
+    markExternal(name);
+    showBanner("The documents in this file could not be read.", [
+      escapeHtml(e instanceof ReadError ? e.message : String(e)),
+    ]);
+    return;
+  }
+  markExternal(name);
+  renderAll();
+  requestAnimationFrame(() => fitGraph());
 }
 
 async function loadDataset(id: string): Promise<void> {

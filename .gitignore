@@ -4,6 +4,7 @@
 # Node / Vite
 node_modules/
 dist/
+dist-single/
 *.tsbuildinfo
 
 # Datasets are generated from external/ at build time (design.md D9 ①).

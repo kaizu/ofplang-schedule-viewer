@@ -1,0 +1,104 @@
+/**
+ * The single-file viewer, opened the way people will open it: from disk.
+ *
+ * `npm run test:e2e` builds `dist-single/viewer.html` first. Each test writes
+ * documents into it with the same `embed()` the Python CLI will mirror, then
+ * opens the result over `file://` — no server, which is the whole point of
+ * the single file (design.md D48).
+ */
+
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { expect, test, type Page } from "@playwright/test";
+
+// @ts-expect-error — a plain .mjs module, shared with the build scripts
+import { embed } from "../../scripts/embed.mjs";
+
+const TEMPLATE = fileURLToPath(new URL("../../dist-single/viewer.html", import.meta.url));
+const example = (rel: string): string =>
+  readFileSync(fileURLToPath(new URL(`../../../external/ofplang-schedule/examples/${rel}`, import.meta.url)), "utf8");
+
+test.beforeAll(() => {
+  if (!existsSync(TEMPLATE)) throw new Error("no dist-single/viewer.html — run `npm run build:single` first");
+});
+
+/** Write a viewer with `docs` in it and open it from disk; count what it fetched. */
+async function openWith(page: Page, docs: unknown, file: string): Promise<string[]> {
+  writeFileSync(file, (embed as (t: string, d: unknown) => string)(readFileSync(TEMPLATE, "utf8"), docs));
+  const requests: string[] = [];
+  page.on("request", (r) => requests.push(r.url()));
+  await page.goto(pathToFileURL(file).href);
+  return requests;
+}
+
+test("a plan with its workflow and environment, from disk", async ({ page }, info) => {
+  const requests = await openWith(
+    page,
+    {
+      name: "plate_batch.plan.yaml",
+      plan: example("outputs/plate_batch.plan.yaml"),
+      workflow: example("outputs/plate_batch.workflow.yaml"),
+      environment: example("outputs/plate_batch.env.yaml"),
+    },
+    info.outputPath("plate_batch.html"),
+  );
+
+  await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+  await expect(page.locator("#graph g.gnode").first()).toBeVisible();
+  await expect(page.locator('#layouts [data-layout="split"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#ro-count")).toHaveText("44");
+  await expect(page.locator("#dataset option:checked")).toHaveText("plate_batch.plan.yaml");
+
+  // Nothing beside the file is needed: no datasets, no script, no stylesheet.
+  // The web fonts are the one thing it may ask for, and it works without them.
+  const local = requests.filter((u) => !u.startsWith("https://fonts."));
+  expect(local.filter((u) => !u.startsWith("file:") || /datasets|assets/.test(u))).toEqual([]);
+
+  // A link made from a file on someone's disk would point at that disk (D48).
+  await expect(page.locator("#share")).toBeHidden();
+
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: fileURLToPath(new URL("../../shots/single.plate_batch.png", import.meta.url)) });
+});
+
+test("a workflow alone opens on the workflow alone", async ({ page }, info) => {
+  await openWith(
+    page,
+    { name: "reformatter.workflow.yaml", workflow: example("reformatter.workflow.yaml") },
+    info.outputPath("workflow.html"),
+  );
+  await expect(page.locator("#graph g.gnode")).toHaveCount(9);
+  await expect(page.locator("#plan-pane")).toBeHidden();
+});
+
+test("text that would end the element early arrives intact", async ({ page }, info) => {
+  // A YAML comment is free text; `</script>` in it must not cut the page short.
+  const workflow = `${example("reformatter.workflow.yaml")}\n# </script><b>not markup</b> $& $1\n`;
+  await openWith(page, { name: "tricky.yaml", workflow }, info.outputPath("tricky.html"));
+  await expect(page.locator("#graph g.gnode")).toHaveCount(9);
+  await expect(page.locator("b", { hasText: "not markup" })).toHaveCount(0);
+});
+
+test("a joint plan is refused here too, with its reason", async ({ page }, info) => {
+  await openWith(
+    page,
+    { name: "shared_bay.plan.yaml", plan: example("outputs/shared_bay.plan.yaml") },
+    info.outputPath("joint.html"),
+  );
+  await expect(page.locator("#banner")).toContainText("§6.11");
+  await expect(page.locator("#plan-empty-title")).toHaveText("Plan not drawn.");
+});
+
+test("an empty viewer asks for a drop, and takes one", async ({ page }, info) => {
+  await openWith(page, null, info.outputPath("empty.html"));
+  await expect(page.locator("#banner")).toContainText("no documents");
+
+  const dataTransfer = await page.evaluateHandle((text) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([text], "reformatter.workflow.yaml", { type: "text/yaml" }));
+    return dt;
+  }, example("reformatter.workflow.yaml"));
+  await page.dispatchEvent("body", "drop", { dataTransfer });
+  await expect(page.locator("#graph g.gnode")).toHaveCount(9);
+});

@@ -25,6 +25,25 @@ it lights up. No install, no server, no Python.
 > `prototype/` holds the single-file look-and-feel study the visual decisions
 > were made against.
 
+## A single file
+
+The same viewer also builds as **one self-contained HTML file** that carries
+its documents inside it: open it from disk, no server, nothing beside it.
+`npm run build:single` writes the empty template, `web/dist-single/viewer.html`
+(also kept as the `viewer-template` artifact of every CI run), and
+`web/scripts/embed.mjs` puts documents into it:
+
+```sh
+node scripts/embed.mjs dist-single/viewer.html out.html plan.yaml --workflow w.yaml --env e.yaml
+```
+
+The documents go in as the YAML text as written, in one element —
+`<script type="application/json" id="ofp-documents" data-contract="1">` — and
+the page reads them with the same reader it uses for a dropped file. An empty
+template (`null` in that element) is an offline viewer to drop files on. The
+web fonts stay a link, so offline the page falls back to system fonts; *Copy
+link* is hidden, since a link made from a file on disk would point at the disk.
+
 ## Layout
 
 | Path | What it is |
@@ -36,6 +55,8 @@ it lights up. No install, no server, no Python.
 | `web/src/layout/` | lanes, bars and the time scale; pure functions, no DOM |
 | `web/src/view/` | SVG rendering, the inspector, and the SVG export |
 | `web/scripts/collect-datasets.mjs` | turns the submodule's examples into the bundled datasets |
+| `web/scripts/build-single.mjs` | folds the build into the one-file viewer template |
+| `web/scripts/embed.mjs` | puts documents into that template — the contract, in one place |
 | `web/tests/golden/` | every example the pinned submodule ships must read |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
@@ -65,6 +86,8 @@ npm run datasets   # rebuild public/datasets/ from external/
 npm run typecheck  # tsc --noEmit
 npm test           # golden tests against external/ofplang-schedule
 npm run build      # typecheck + production build into web/dist
+npm run build:single  # …and the one-file template into web/dist-single
+npm run test:e2e   # the browser tests (builds the template first)
 ```
 
 Already cloned without `--recurse-submodules`? `git submodule update --init`.
