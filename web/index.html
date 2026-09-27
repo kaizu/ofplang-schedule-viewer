@@ -3,11 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ofplang Plan Viewer</title>
+    <title>OFP View</title>
     <meta
       name="description"
-      content="Read an ofp-schedule execution plan: what runs where, and when."
+      content="Read an ofplang workflow and the plans ofp-schedule makes from it, linked: what runs where, and when."
     />
+    <!-- The ofplang mark (ofplang/spec, logos/). SVG inline, so a single-file
+         viewer needs nothing beside it; the PNG is for browsers that will not
+         take an SVG icon, and is dropped from the single file. -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%23A81F24'/%3E%3Cg transform='translate(35.6 86.6) scale(2.5)' fill='none' stroke='%23fff' stroke-width='9' stroke-linecap='round'%3E%3Cpath d='M74 54 A32 32 0 1 0 76 73 H90'/%3E%3Cpath d='M118 73 H148'/%3E%3Cpath d='M104 123 V29 Q104 19 114 19 H148'/%3E%3C/g%3E%3Cg transform='translate(35.6 86.6) scale(2.5)' fill='%23fff'%3E%3Ccircle cx='148' cy='73' r='11'/%3E%3Ccircle cx='148' cy='19' r='11'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="icon" type="image/png" href="favicon.png" data-site-only />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,7 +23,7 @@
   <body>
     <div id="app">
       <div class="rail">
-        <div class="wordmark"><b>Plan Viewer</b><span class="tagchip">ofp-schedule</span></div>
+        <div class="wordmark" title="OFP View — a viewer for Object-Flow Programming Language documents"><svg class="mark" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true"><circle cx="256" cy="256" r="252" fill="#A81F24"/><g transform="translate(35.6 86.6) scale(2.5)" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"><path d="M74 54 A32 32 0 1 0 76 73 H90"/><path d="M118 73 H148"/><path d="M104 123 V29 Q104 19 114 19 H148"/></g><g transform="translate(35.6 86.6) scale(2.5)" fill="#fff"><circle cx="148" cy="73" r="11"/><circle cx="148" cy="19" r="11"/></g></svg><b>OFP View</b></div>
 
         <label class="lg" for="dataset">Plan</label>
         <select id="dataset" aria-label="Plan"></select>

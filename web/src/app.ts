@@ -404,6 +404,7 @@ async function loadDataset(id: string): Promise<void> {
   const url = new URL(location.href);
   url.searchParams.set("doc", id);
   history.replaceState(null, "", url);
+  nameTab(payload.label);
 
   adopt(
     payload,
@@ -689,6 +690,15 @@ const hideBanner = (): void => {
 const DROPPED = "__external__";
 
 /**
+ * The tab says what is open, then what the page is — several single-file
+ * viewers opened side by side are told apart by their tabs. A placeholder
+ * (`(no documents)`) names nothing, so it leaves the name alone.
+ */
+function nameTab(what: string | undefined): void {
+  document.title = what && !what.startsWith("(") ? `${what} — OFP View` : "OFP View";
+}
+
+/**
  * What is on screen did not come from the list, so the list must stop claiming
  * it did — and the `?doc=` in the address bar must stop pointing at a plan
  * nobody is looking at.
@@ -703,6 +713,7 @@ function markExternal(label: string): void {
   }
   option.textContent = label;
   picker.value = DROPPED;
+  nameTab(label);
 
   const url = new URL(location.href);
   url.searchParams.delete("doc");

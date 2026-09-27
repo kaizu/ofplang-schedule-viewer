@@ -81,6 +81,10 @@ test("a plan with its workflow and environment, from disk", async ({ page }, inf
   // A link made from a file on someone's disk would point at that disk (D48).
   await expect(page.locator("#share")).toBeHidden();
 
+  // Its tab says which file it is; its icon is inline, with no PNG to look for beside it (D55).
+  await expect(page).toHaveTitle("plate_batch.plan.yaml — OFP View");
+  await expect(page.locator('link[rel="icon"]')).toHaveCount(1);
+
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: fileURLToPath(new URL("../../shots/single.plate_batch.png", import.meta.url)) });
 });

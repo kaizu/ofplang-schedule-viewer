@@ -38,6 +38,10 @@ const scriptSafe = (js) => js.replace(/<\/script/gi, "<\\/script").replace(/<!--
 inline(/<script type="module" crossorigin src="\.\/(assets\/[^"]+\.js)"><\/script>/, (js) =>
   `<script type="module">${scriptSafe(js)}</script>`,
 );
+// The PNG icon sits beside the site; a single file has nothing beside it,
+// and keeps only the inline SVG one.
+html = html.replace(/\s*<link rel="icon" type="image\/png"[^>]*data-site-only[^>]*>/, "");
+
 inline(/<link rel="stylesheet" crossorigin href="\.\/(assets\/[^"]+\.css)">/, (css) =>
   `<style>${css.replace(/<\/style/gi, "<\\/style")}</style>`,
 );

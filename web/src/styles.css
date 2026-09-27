@@ -134,7 +134,6 @@ body {
   min-width: 120px;
 }
 @media (max-width: 1180px) {
-  .tagchip,
   .rail > label.lg {
     display: none;
   }
@@ -159,15 +158,9 @@ body {
   letter-spacing: -0.012em;
   white-space: nowrap;
 }
-.tagchip {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--faint);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 4px;
+.wordmark .mark {
+  flex: none;
+  display: block;
 }
 
 .readouts {

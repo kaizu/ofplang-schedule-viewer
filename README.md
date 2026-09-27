@@ -7,6 +7,7 @@ Readable views of [ofplang](https://github.com/ofplang/spec) documents: a
 workflow as its dataflow graph, and the execution plans
 [`ofp-schedule`](https://github.com/ofplang/schedule) produces from it, shown
 side by side and linked — as a web site, and as one self-contained HTML file.
+The viewer is **OFP View** (OFP: Object-Flow Programming).
 
 It reads the documents the ofplang specifications define and nothing more, so
 it does not depend on any dialect built on top of them.
@@ -96,6 +97,7 @@ link* is hidden, since a link made from a file on disk would point at the disk.
 | `web/tests/golden/` | every example the pinned submodule ships must read |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
+| `web/public/favicon.png` | the ofplang mark, from [`ofplang/spec`](https://github.com/ofplang/spec) `logos/symbol-square.png`; the SVG versions are inline in `web/index.html` |
 
 ## Why a TypeScript reader instead of reusing the Python one
 
