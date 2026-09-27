@@ -17,11 +17,11 @@ import {
   buildGraph,
   compositeKeys,
   edgeKey,
-  findNode,
   visibleFor,
   type GraphNode,
 } from "./model/graph";
 import { tracingOf, type ObjectTrace } from "./model/objects";
+import { arcKey } from "./model/common";
 import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import {
   carriesLabel,
@@ -252,9 +252,17 @@ function litNodes(): Highlight {
         for (const k of ancestorKeys(path)) onPath.add(k);
       }
 
-      // A move serves one connection. Name it, so one edge traces rather than
-      // everything that happens to touch either end.
+      // A move serves one arc. Trace the connections it runs along, so they
+      // light rather than everything that happens to touch either end. With a
+      // composite open that is several — into its border, then down to the
+      // step inside (D61); comparing only the two visible ends found none.
       if (activity.kind === "transport" || activity.kind === "relay") {
+        const route = arcRoute(graph, activity.arc);
+        if (route) {
+          for (const k of lit) onPath.delete(k);
+          return { lit, onPath, edges: new Set(route.map(edgeKey)) };
+        }
+        // Not this workflow's arc: fall back to the two ends as drawn.
         const fromKey = visibleFor(graph, activity.arc.from.node, state.expanded);
         const toKey = visibleFor(graph, activity.arc.to.node, state.expanded);
         if (fromKey !== undefined && toKey !== undefined) {
@@ -281,27 +289,23 @@ const keyPath = (key: string): string[] => (key === "" ? [] : key.split("."));
 
 /**
  * The moves that carry an Object along one drawn edge — the reverse of what a
- * selected move traces in the graph. An edge joins two *visible* boxes, so a
- * move belongs to it when its arc's ends resolve to those boxes; the ports
- * are compared only where the box really has them, since an arc into a closed
- * composite names a port of the step inside it. Pure Data moves nothing.
+ * selected move traces in the graph: a move belongs to the edge when the edge
+ * is on its arc's route (`arcRoute`). That holds at any depth, open or shut;
+ * matching the arc's two visible ends did not, once a composite was open and
+ * the edge ran from its border to a step inside (D61). Pure Data moves nothing.
  */
 function movesOn(edge: EdgeRef): number[] {
   const scene = state.scene;
   const graph = state.graph;
   if (!scene || !graph || !edge.object) return [];
-  const exposes = (key: string, port: string): boolean => {
-    const n = findNode(graph, key);
-    return !!n && (n.inputs.includes(port) || n.outputs.includes(port));
-  };
+  const key = edgeKey(edge);
+  const on = new Map<string, boolean>();
   const out: number[] = [];
   scene.activities.forEach((a, i) => {
     if (a.kind !== "transport" && a.kind !== "relay") return;
-    if (visibleFor(graph, a.arc.from.node, state.expanded) !== edge.fromKey) return;
-    if (visibleFor(graph, a.arc.to.node, state.expanded) !== edge.toKey) return;
-    const portsKnown = exposes(edge.fromKey, a.arc.from.port) && exposes(edge.toKey, a.arc.to.port);
-    if (portsKnown && (a.arc.from.port !== edge.fromPort || a.arc.to.port !== edge.toPort)) return;
-    out.push(i);
+    const arc = arcKey(a.arc);
+    if (!on.has(arc)) on.set(arc, (arcRoute(graph, a.arc) ?? []).some((e) => edgeKey(e) === key));
+    if (on.get(arc)) out.push(i);
   });
   return out;
 }

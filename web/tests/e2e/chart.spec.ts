@@ -594,3 +594,22 @@ test.describe("a plan with a refill", () => {
     await expect(page.locator("#inspector")).toContainText("reagent");
   });
 });
+
+test.describe("a move and the connections it runs along, with the graph open (D61)", () => {
+  // Activity 1 moves plate_1 from `source` into b1/rep1/peal: across two
+  // composite borders, so open it is three drawn connections, not one.
+  test.beforeEach(async ({ page }) => {
+    await open(page, "plate_batch");
+    await page.locator("#expand-all").click();
+  });
+
+  test("a move lights every connection it runs along", async ({ page }) => {
+    await page.locator('#plot rect.bar[data-i="1"]').first().click();
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(3);
+  });
+
+  test("a connection inside an open composite finds the move along it", async ({ page }) => {
+    await page.locator('#graph .edge-hit[data-from="b1"][data-to="b1.rep1"]').click();
+    await expect(page.locator('#plot rect.bar.lit[data-i="1"]').first()).toBeVisible();
+  });
+});
