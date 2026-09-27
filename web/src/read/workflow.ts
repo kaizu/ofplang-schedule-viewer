@@ -83,6 +83,7 @@ function readProcess(raw: unknown, path: string): ProcessDef {
     };
     const objects = optRecord(p["objects"], at(path, "objects"));
     if (objects) a.objects = readObjects(objects, at(path, "objects"));
+    if (p["behavior"] !== undefined) a.behavior = stringList(p["behavior"], at(path, "behavior"));
     return a;
   }
 

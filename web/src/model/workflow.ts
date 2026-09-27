@@ -29,6 +29,11 @@ export interface AtomicProcess {
   readonly inputs: Readonly<Record<string, PortDecl>>;
   readonly outputs: Readonly<Record<string, PortDecl>>;
   readonly objects?: ObjectsSection;
+  /**
+   * workflow spec §15, as written. `object_identity_map` is the only marker
+   * v0 defines; where `objects` is absent it implies a `map` (`objectsOf`).
+   */
+  readonly behavior?: readonly string[];
 }
 
 export interface NodeInvocation {
