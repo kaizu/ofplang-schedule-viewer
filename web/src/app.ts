@@ -332,6 +332,8 @@ interface EmbeddedDocuments {
   readonly plan?: string;
   readonly workflow?: string;
   readonly environment?: string;
+  /** What to open on, when the writer said (`ofp-export view --layout / --gantt`). */
+  readonly ui?: { readonly layout?: string; readonly view?: string };
 }
 
 /**
@@ -371,6 +373,13 @@ function startEmbedded(json: string): void {
   const name = docs.name || "embedded documents";
   try {
     adopt(raw, name, "Embedded in this file.");
+    // Unknown values are ignored rather than refused: a newer writer may know more.
+    if (isLayout(docs.ui?.layout)) state.layout = docs.ui.layout;
+    const view = GANTT_VIEWS.find((v) => v.id === docs.ui?.view);
+    if (view) {
+      state.view = view.id;
+      buildViewButtons();
+    }
   } catch (e) {
     markExternal(name);
     showBanner("The documents in this file could not be read.", [

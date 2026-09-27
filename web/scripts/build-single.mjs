@@ -18,6 +18,8 @@ import { CONTRACT } from "./embed.mjs";
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const DIST = here("../dist/");
 const OUT = here("../dist-single/");
+// The Python package carries the same file (design.md D50); ignored by git.
+const PACKAGE = here("../../ofplang/export/_template/");
 
 let html = readFileSync(`${DIST}index.html`, "utf8");
 
@@ -56,4 +58,6 @@ html = html.replace(
 
 mkdirSync(OUT, { recursive: true });
 writeFileSync(`${OUT}viewer.html`, html);
+mkdirSync(PACKAGE, { recursive: true });
+writeFileSync(`${PACKAGE}viewer.html`, html);
 console.log(`build-single: dist-single/viewer.html (${Math.round(html.length / 1024)} KB, build ${build})`);

@@ -10,6 +10,16 @@ dist-single/
 # Datasets are generated from external/ at build time (design.md D9 ①).
 /web/public/datasets/
 
+# Python
+__pycache__/
+*.egg-info/
+/build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+# Built from web/ by `npm run build:single`; the wheel carries it (design.md D50).
+/ofplang/export/_template/
+
 # Editor / OS
 .DS_Store
 Thumbs.db

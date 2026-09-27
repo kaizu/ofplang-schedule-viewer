@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ofplang-export"
+description = "Write Object-flow Programming Language documents out in a form people read."
+requires-python = ">=3.10"
+dynamic = ["version"]
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Kazunari Kaizu", email = "kwaizu@gmail.com" }]
+keywords = ["ofplang", "dataflow", "workflow", "schedule", "viewer", "html"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Typing :: Typed",
+]
+# The page reads the documents; this package only finds and embeds them, so
+# YAML is the one thing it needs (design.md D48, D50).
+dependencies = ["PyYAML>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/ofplang/export"
+Repository = "https://github.com/ofplang/export"
+Viewer = "https://ofplang.github.io/export/"
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "ruff>=0.16", "mypy>=1.11", "types-PyYAML"]
+
+[project.scripts]
+# Standalone command; the umbrella `ofp` CLI (separate repo) exposes this as
+# `ofp export`, and labcode's `lc` as `lc export`.
+ofp-export = "ofplang.export.cli:main"
+
+# Version is derived from git tags (e.g. `v0.1.0`) by setuptools-scm; there is no
+# static version in this file.
+[tool.setuptools_scm]
+
+# `ofplang` is a PEP 420 namespace shared across the org's repos (validate,
+# schedule, run, …); this distribution provides only `ofplang.export` under it.
+[tool.setuptools.packages.find]
+include = ["ofplang*"]
+namespaces = true
+
+# The viewer template is built from web/ (`npm run build:single`) and is not
+# committed; MANIFEST.in carries it into the sdist, this into the wheel.
+[tool.setuptools.package-data]
+"ofplang.export" = ["py.typed", "SKILL.md", "_template/viewer.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["web", "external", "prototype"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "W"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["ofplang"]

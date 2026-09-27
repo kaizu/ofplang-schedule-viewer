@@ -8,9 +8,17 @@ workflow as its dataflow graph, and the execution plans
 side by side and linked — as a web site, and as one self-contained HTML file.
 
 It reads the documents the ofplang specifications define and nothing more, so
-it does not depend on any dialect built on top of them. The command that
-writes the single file, `ofp-export`, is next (it will also be reachable as
-`ofp export` and `lc export`).
+it does not depend on any dialect built on top of them.
+
+```sh
+pip install ofplang-export
+ofp-export view plan.yaml -o plan.html        # a plan; its workflow and environment come from its meta
+ofp-export view workflow.yaml -o wf.html      # a workflow on its own
+```
+
+`ofp-export view` writes the viewer as **one HTML file with the documents in
+it**, to open from disk or send to someone. It is also meant to be reachable as
+`ofp export view` and, under labcode, `lc export view`.
 
 **→ [ofplang.github.io/export](https://ofplang.github.io/export/)**
 — ten plans are bundled; `?doc=plate_batch` opens one directly. Drop your own
@@ -29,6 +37,26 @@ it lights up. No install, no server, no Python.
 > lights up in the plan. Plans can be exported as SVG or put in a link.
 > `prototype/` holds the single-file look-and-feel study the visual decisions
 > were made against.
+
+## The command
+
+```sh
+ofp-export view <file>... [-o OUT] [--layout split|workflow|plan] [--gantt device|flow|activity]
+                          [--name NAME] [--no-follow] [--json]
+```
+
+- Files are a plan, a workflow and/or an environment, in any order; which is
+  which is read from the file. A plan's `meta` supplies the workflow and the
+  environment unless they are given (`--no-follow` turns that off).
+- Without `-o` the HTML goes to standard output, as `ofp-schedule` does with a
+  plan. With `-o` the path written is printed; `--json` prints a summary instead.
+- Exit codes: **0** written (warnings, if any, on stderr — parts of a workflow
+  the viewer shows only as source structure), **2** bad input, **3** refused
+  and nothing written — a joint plan (several workflows scheduled together as
+  jobs), which this viewer does not draw.
+
+[`ofplang/export/SKILL.md`](ofplang/export/SKILL.md) says the same for an agent
+calling the command, and ships in the package.
 
 ## A single file
 
@@ -62,6 +90,8 @@ link* is hidden, since a link made from a file on disk would point at the disk.
 | `web/scripts/collect-datasets.mjs` | turns the submodule's examples into the bundled datasets |
 | `web/scripts/build-single.mjs` | folds the build into the one-file viewer template |
 | `web/scripts/embed.mjs` | puts documents into that template — the contract, in one place |
+| `ofplang/export/` | the `ofp-export` Python package; `template.py` is the same contract in Python |
+| `tests/` | its tests (pytest), against the pinned submodule's examples |
 | `web/tests/golden/` | every example the pinned submodule ships must read |
 | `external/ofplang-schedule` | submodule, pinned by tag — specifications and examples |
 | `prototype/` | a single-file look-and-feel study; not the codebase |
@@ -94,6 +124,19 @@ npm run build      # typecheck + production build into web/dist
 npm run build:single  # …and the one-file template into web/dist-single
 npm run test:e2e   # the browser tests (builds the template first)
 ```
+
+The Python package, from the repository root (after `npm run build:single`,
+which also puts the template into `ofplang/export/_template/`):
+
+```sh
+pip install -e ".[dev]"
+pytest
+```
+
+A release is a `v*` tag: `publish.yml` builds the template and the wheel from
+the same commit and publishes through PyPI trusted publishing (an `rc` tag goes
+to TestPyPI). Installing straight from git gives no template — it is built, not
+committed — and the command says so.
 
 Already cloned without `--recurse-submodules`? `git submodule update --init`.
 

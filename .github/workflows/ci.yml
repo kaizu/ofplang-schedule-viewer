@@ -42,6 +42,58 @@ jobs:
           path: web/dist-single/viewer.html
           retention-days: 90
 
+  python:
+    # The `ofp-export` command (design.md D49, D50). The template it embeds into
+    # is built from web/ first, so the wheel check below sees the real one.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+          # setuptools-scm derives the version from tags + history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - run: npm ci && npm run build:single
+        working-directory: web
+
+      - run: python -m pip install -e ".[dev]"
+
+      - run: python -m pytest
+
+      - name: Lint and types
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m ruff check ofplang tests
+          python -m ruff format --check ofplang tests
+          python -m mypy
+
+      # The template is built, not committed, so it reaches the wheel only
+      # through MANIFEST.in and package-data. Check that it did, and that the
+      # installed command finds it.
+      - name: The wheel carries the template
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m pip install build
+          python -m build
+          python -m zipfile -l dist/*.whl | grep -q "ofplang/export/_template/viewer.html"
+          python -m venv /tmp/w && /tmp/w/bin/pip install dist/*.whl
+          /tmp/w/bin/ofp-export view external/ofplang-schedule/examples/reformatter.workflow.yaml -o /tmp/w.html
+          grep -q 'id="ofp-documents"' /tmp/w.html
+
   browser:
     # Layout is the one thing the unit tests cannot see (dev-notes D26).
     runs-on: ubuntu-latest
@@ -55,6 +107,13 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
+
+      # One browser test opens a file the Python command wrote.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install PyYAML
 
       - run: npm ci
         working-directory: web
@@ -75,7 +134,7 @@ jobs:
   pages:
     # D1 only actually holds once there is a URL to hand someone. Gated on both
     # other jobs, so a broken chart never becomes the published one.
-    needs: [check, browser]
+    needs: [check, browser, python]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

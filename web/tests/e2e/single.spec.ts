@@ -7,6 +7,7 @@
  * the single file (design.md D48).
  */
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -22,6 +23,28 @@ const example = (rel: string): string =>
 test.beforeAll(() => {
   if (!existsSync(TEMPLATE)) throw new Error("no dist-single/viewer.html — run `npm run build:single` first");
 });
+
+/**
+ * An interpreter that really runs, with PyYAML, as the path of its executable.
+ *
+ * On Windows a bare `python` spawned from Node can be the Microsoft Store alias
+ * (exit 9009), and a pyenv-win shim is a `.bat` that only a shell can start. So
+ * each candidate is asked, through the shell, where its real executable is —
+ * and that path is then run directly, with no shell to mangle arguments that
+ * contain spaces.
+ */
+function findPython(): string[] {
+  const candidates = [process.env["PYTHON"], "python3", "python", "py -3"].filter(Boolean) as string[];
+  for (const cmd of candidates) {
+    const probe = spawnSync(`${cmd} -c "import sys, yaml; print(sys.executable)"`, {
+      shell: true,
+      encoding: "utf8",
+    });
+    const exe = probe.stdout?.trim();
+    if (probe.status === 0 && exe && existsSync(exe)) return [exe];
+  }
+  throw new Error("no Python with PyYAML found; set PYTHON to one");
+}
 
 /** Write a viewer with `docs` in it and open it from disk; count what it fetched. */
 async function openWith(page: Page, docs: unknown, file: string): Promise<string[]> {
@@ -88,6 +111,37 @@ test("a joint plan is refused here too, with its reason", async ({ page }, info)
   );
   await expect(page.locator("#banner")).toContainText("§6.11");
   await expect(page.locator("#plan-empty-title")).toHaveText("Plan not drawn.");
+});
+
+test("a file written by the Python command opens on what it was asked for", async ({ page }, info) => {
+  // Across the two languages: `ofp-export view` (Python) fills the template the
+  // page is built into, and the page honours the opening view it was given.
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  const out = info.outputPath("from-python.html");
+  const [python, ...lead] = findPython();
+  const run = spawnSync(
+    python!,
+    [
+      ...lead,
+      "-m", "ofplang.export", "view",
+      "external/ofplang-schedule/examples/outputs/plate_batch.plan.yaml",
+      "--layout", "plan", "--gantt", "flow",
+      "--template", TEMPLATE,
+      "-o", out,
+    ],
+    { cwd: repo, encoding: "utf8" },
+  );
+  expect(run.status, `${python} said: ${run.stderr || run.error}`).toBe(0);
+  const printed = run.stdout.trim();
+  expect(printed).toBe(out);
+
+  await page.goto(pathToFileURL(out).href);
+  await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+  await expect(page.locator("#graph-pane")).toBeHidden();
+  await expect(page.locator('#views button[data-view="flow"]')).toHaveAttribute("aria-pressed", "true");
+  // The workflow came from the plan's `meta`, so choosing Both shows it.
+  await page.locator('#layouts [data-layout="split"]').click();
+  await expect(page.locator("#graph g.gnode").first()).toBeVisible();
 });
 
 test("an empty viewer asks for a drop, and takes one", async ({ page }, info) => {
