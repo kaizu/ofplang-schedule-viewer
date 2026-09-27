@@ -256,6 +256,33 @@ test.describe("the two panes are linked", () => {
     await expect(page.locator('#graph [data-key="b2.rep1.thermal"]')).toHaveClass(/lit/);
   });
 
+  test("picking an arc traces that one arc, not everything around it", async ({ page }) => {
+    // Reported: a click on an arc lit every arc. The line is 1.25px, so the
+    // click fell through to the open `main` behind it and selected all of it.
+    await open(page, "plate_batch");
+    const total = await page.locator("#graph path.edge").count();
+    expect(total).toBeGreaterThan(3);
+
+    await page.locator('#graph .edge-hit[data-from="source"][data-to="b1"]').click();
+
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(1);
+    await expect(page.locator("#graph g.gnode.lit")).toHaveCount(2);
+    await expect(page.locator('#graph [data-key="source"]')).toHaveClass(/lit/);
+    await expect(page.locator('#graph [data-key="b1"]')).toHaveClass(/lit/);
+    await expect(page.locator("#status-selection")).toContainText("Selected connection");
+
+    // In the plan, the move that carries the plate along it — and only moves.
+    const lit = page.locator("#plot rect.bar.lit");
+    expect(await lit.count()).toBeGreaterThan(0);
+    for (const cls of await lit.evaluateAll((els) => els.map((e) => e.getAttribute("class") ?? "")))
+      expect(cls).toMatch(/transport|held|relay/);
+    await expect(page.locator("#inspector")).toContainText("source.plate_1 → b1.plate");
+
+    // Picking it again puts it down.
+    await page.locator('#graph .edge-hit[data-from="source"][data-to="b1"]').click();
+    await expect(page.locator("#graph path.edge.lit")).toHaveCount(0);
+  });
+
   test("picking a box lights everything under it, and nothing else", async ({ page }) => {
     await open(page, "plate_batch");
     await page.locator('#graph [data-key="b1"] rect.box').click();

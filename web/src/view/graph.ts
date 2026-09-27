@@ -101,8 +101,22 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
     })
     .join("");
 
+  // A 1.25px line is too thin to hit, and a miss lands on the open container
+  // underneath — selecting all of it. Each edge gets a wide invisible twin
+  // that carries its identity, above the drawn edges and below the boxes.
+  const hits = layout.edges
+    .map((e) => {
+      const dx = Math.max(24, (e.to.x - e.from.x) / 2);
+      const d = `M ${r(e.from.x)} ${r(e.from.y)} C ${r(e.from.x + dx)} ${r(e.from.y)}, ${r(e.to.x - dx)} ${r(e.to.y)}, ${r(e.to.x)} ${r(e.to.y)}`;
+      return (
+        `<path class="edge-hit" d="${d}" data-from="${esc(e.fromKey)}" data-from-port="${esc(e.fromPort)}" ` +
+        `data-to="${esc(e.toKey)}" data-to-port="${esc(e.toPort)}" data-object="${e.object}"/>`
+      );
+    })
+    .join("");
+
   return {
-    svg: shells + edges + leaves,
+    svg: shells + edges + hits + leaves,
     width: layout.width + 4,
     height: layout.height + 4,
   };

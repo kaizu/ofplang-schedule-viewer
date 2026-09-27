@@ -212,6 +212,27 @@ function detail(scene: Scene, index: number): string {
   return out.join("");
 }
 
+/** A selected connection in the graph: what it joins, and what the plan moves along it. */
+export function renderEdgeDetail(
+  label: string,
+  object: boolean,
+  scene: Scene | undefined,
+  moves: readonly number[],
+): string {
+  const out = [`<div><h3>connection</h3><div class="lead">${esc(label)}</div></div>`];
+  const rows: (readonly [string, unknown])[] = [["carries", object ? "an Object" : "Pure Data"]];
+  if (scene) rows.push(["moves", object ? moves.length : "— (Pure Data is a dependency, not a move)"]);
+  out.push(block("Dataflow", dl(rows)));
+  if (scene && moves.length) {
+    const unit = scene.unit;
+    const lines = moves
+      .map((i) => scene.activities[i]!)
+      .map((a) => `${formatDuration(a.start, unit)} – ${formatDuration(a.end, unit)} · ${activityLabel(a)}`);
+    out.push(block("In the plan", `<div class="note">${lines.map(esc).join("<br>")}</div>`));
+  }
+  return out.join("");
+}
+
 /** The hover card. */
 export function tooltipFor(scene: Scene, index: number): string {
   const a = scene.activities[index];

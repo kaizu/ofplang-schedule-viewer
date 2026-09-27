@@ -13,11 +13,21 @@ import {
   ancestorKeys,
   buildGraph,
   compositeKeys,
+  findNode,
   visibleFor,
   type GraphNode,
 } from "./model/graph";
 import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
-import { copyShareLink, el, escapeHtml, placeTip, wireGraphPointer, wireSplitter } from "./interactions";
+import {
+  copyShareLink,
+  edgeLabel,
+  el,
+  escapeHtml,
+  placeTip,
+  wireGraphPointer,
+  wireSplitter,
+  type EdgeRef,
+} from "./interactions";
 import type { ExecutionDocument } from "./model/document";
 import type { Environment } from "./model/environment";
 import type { Workflow } from "./model/workflow";
@@ -41,6 +51,7 @@ import { GUTTER_W, renderGantt, type GanttGeometry } from "./view/gantt";
 import { renderGraph } from "./view/graph";
 import {
   renderInspector,
+  renderEdgeDetail,
   renderNodeDetail,
   renderWorkflowOverview,
   statusLine,
@@ -82,7 +93,10 @@ const LAYOUTS: readonly { id: Layout; label: string; hint: string }[] = [
 const isLayout = (v: unknown): v is Layout => LAYOUTS.some((l) => l.id === v);
 
 /** What is picked, in whichever pane the person picked it. */
-type Selection = { kind: "activity"; index: number } | { kind: "node"; key: string };
+type Selection =
+  | { kind: "activity"; index: number }
+  | { kind: "node"; key: string }
+  | ({ kind: "edge" } & EdgeRef);
 
 interface State {
   index: DatasetIndexEntry[];
@@ -135,6 +149,10 @@ function litActivities(): Set<number> {
     for (const i of sameArc(scene, sel.index)) out.add(i);
     return out;
   }
+  if (sel.kind === "edge") {
+    for (const i of movesOn(sel)) out.add(i);
+    return out;
+  }
   for (const i of activitiesUnder(scene, sel.key === "" ? [] : sel.key.split("."))) out.add(i);
   return out;
 }
@@ -156,6 +174,18 @@ function litNodes(): Highlight {
   const sel = state.selected;
   if (!graph || !sel) return { lit, onPath };
 
+  if (sel.kind === "edge") {
+    // The edge itself traces; its two ends light, and nothing else does.
+    lit.add(sel.fromKey);
+    lit.add(sel.toKey);
+    for (const k of [...ancestorKeys(keyPath(sel.fromKey)), ...ancestorKeys(keyPath(sel.toKey))])
+      if (!lit.has(k)) onPath.add(k);
+    return {
+      lit,
+      onPath,
+      arc: { fromKey: sel.fromKey, fromPort: sel.fromPort, toKey: sel.toKey, toPort: sel.toPort },
+    };
+  }
   if (sel.kind === "node") {
     lit.add(sel.key);
     for (const k of ancestorKeys(sel.key === "" ? [] : sel.key.split("."))) onPath.add(k);
@@ -199,6 +229,35 @@ function litNodes(): Highlight {
   }
   for (const k of lit) onPath.delete(k);
   return { lit, onPath };
+}
+
+const keyPath = (key: string): string[] => (key === "" ? [] : key.split("."));
+
+/**
+ * The moves that carry an Object along one drawn edge — the reverse of what a
+ * selected move traces in the graph. An edge joins two *visible* boxes, so a
+ * move belongs to it when its arc's ends resolve to those boxes; the ports
+ * are compared only where the box really has them, since an arc into a closed
+ * composite names a port of the step inside it. Pure Data moves nothing.
+ */
+function movesOn(edge: EdgeRef): number[] {
+  const scene = state.scene;
+  const graph = state.graph;
+  if (!scene || !graph || !edge.object) return [];
+  const exposes = (key: string, port: string): boolean => {
+    const n = findNode(graph, key);
+    return !!n && (n.inputs.includes(port) || n.outputs.includes(port));
+  };
+  const out: number[] = [];
+  scene.activities.forEach((a, i) => {
+    if (a.kind !== "transport" && a.kind !== "relay") return;
+    if (visibleFor(graph, a.arc.from.node, state.expanded) !== edge.fromKey) return;
+    if (visibleFor(graph, a.arc.to.node, state.expanded) !== edge.toKey) return;
+    const portsKnown = exposes(edge.fromKey, a.arc.from.port) && exposes(edge.toKey, a.arc.to.port);
+    if (portsKnown && (a.arc.from.port !== edge.fromPort || a.arc.to.port !== edge.toPort)) return;
+    out.push(i);
+  });
+  return out;
 }
 
 /* ── boot ──────────────────────────────────────────────────────────────── */
@@ -335,14 +394,18 @@ function renderAll(): void {
   el("status-source").textContent = state.source;
 
   el("status-selection").textContent =
-    sel?.kind === "node"
+    sel?.kind === "edge"
+      ? `Selected connection · ${edgeLabel(sel)}`
+      : sel?.kind === "node"
       ? `Selected node · ${sel.key || graph?.process || "entry"}`
       : scene
         ? statusLine(scene, sel?.kind === "activity" ? sel.index : undefined)
         : "Nothing selected — click a box";
 
   el("inspector").innerHTML =
-    sel?.kind === "node" && graph
+    sel?.kind === "edge"
+      ? renderEdgeDetail(edgeLabel(sel), sel.object, scene, movesOn(sel))
+      : sel?.kind === "node" && graph
       ? renderNodeDetail(graph, sel.key, scene)
       : scene
         ? renderInspector(scene, sel?.kind === "activity" ? sel.index : undefined, state.blurb)
@@ -712,6 +775,7 @@ function wireControls(): void {
       renderAll();
     },
     onSelect: (key) => select(key === undefined ? undefined : { kind: "node", key }),
+    onSelectEdge: (edge) => select({ kind: "edge", ...edge }),
   });
   wireSplitter(
     () => state.split,
@@ -737,7 +801,9 @@ function wireControls(): void {
 
 function same(a: Selection | undefined, b: Selection | undefined): boolean {
   if (!a || !b || a.kind !== b.kind) return false;
-  return a.kind === "activity" ? a.index === (b as typeof a).index : a.key === (b as typeof a).key;
+  if (a.kind === "activity") return a.index === (b as typeof a).index;
+  if (a.kind === "node") return a.key === (b as typeof a).key;
+  return edgeLabel(a) === edgeLabel(b as typeof a);
 }
 
 /** Picking the same thing twice puts it down. */

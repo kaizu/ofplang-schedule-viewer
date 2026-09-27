@@ -26,12 +26,38 @@ export function placeTip(tip: HTMLElement, e: MouseEvent): void {
   tip.style.top = `${y}px`;
 }
 
+/** One drawn connection: a port of one visible box to a port of another. */
+export interface EdgeRef {
+  readonly fromKey: string;
+  readonly fromPort: string;
+  readonly toKey: string;
+  readonly toPort: string;
+  readonly object: boolean;
+}
+
 export interface GraphHandlers {
   readonly graph: () => GraphNode | undefined;
   readonly expanded: () => ReadonlySet<string>;
   readonly onToggle: (key: string) => void;
   readonly onSelect: (key: string | undefined) => void;
+  readonly onSelectEdge: (edge: EdgeRef) => void;
 }
+
+const edgeAt = (target: EventTarget | null): EdgeRef | undefined => {
+  const hit = (target as Element | null)?.closest<SVGPathElement>(".edge-hit");
+  if (!hit) return undefined;
+  const d = hit.dataset;
+  return {
+    fromKey: d["from"] ?? "",
+    fromPort: d["fromPort"] ?? "",
+    toKey: d["to"] ?? "",
+    toPort: d["toPort"] ?? "",
+    object: d["object"] === "true",
+  };
+};
+
+export const edgeLabel = (e: EdgeRef): string =>
+  `${e.fromKey ? `${e.fromKey}.` : "inputs."}${e.fromPort} → ${e.toKey ? `${e.toKey}.` : "outputs."}${e.toPort}`;
 
 export function wireGraphPointer(handlers: GraphHandlers): void {
   const host = el("graph");
@@ -41,6 +67,11 @@ export function wireGraphPointer(handlers: GraphHandlers): void {
     (target as Element | null)?.closest<SVGGElement>("[data-key]")?.dataset["key"];
 
   host.addEventListener("click", (e) => {
+    const edge = edgeAt(e.target);
+    if (edge) {
+      handlers.onSelectEdge(edge);
+      return;
+    }
     const key = keyAt(e.target);
     if (key === undefined) {
       handlers.onSelect(undefined);
@@ -60,6 +91,14 @@ export function wireGraphPointer(handlers: GraphHandlers): void {
   });
 
   host.addEventListener("mousemove", (e) => {
+    const edge = edgeAt(e.target);
+    if (edge) {
+      tip.innerHTML =
+        `<div class="tt">${escapeHtml(edgeLabel(edge))}</div>` +
+        `<div class="tl">${edge.object ? "carries an Object" : "Pure Data"} · click to trace it</div>`;
+      placeTip(tip, e);
+      return;
+    }
     const graph = handlers.graph();
     const key = keyAt(e.target);
     const node = graph && key !== undefined ? findNode(graph, key) : undefined;

@@ -64,6 +64,9 @@ test("the workflow graph, and the link between the panes", async ({ page }) => {
 
   await page.locator('#graph [data-key="b1"] rect.box').click();
   await shot(page, "linked.box-to-bars");
+
+  await page.locator('#graph .edge-hit[data-from="source"][data-to="b1"]').click();
+  await shot(page, "linked.arc-to-moves");
 });
 
 test("the graph of a wide fan-out", async ({ page }) => {

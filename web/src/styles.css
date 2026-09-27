@@ -430,6 +430,13 @@ main {
 .edge.data {
   stroke-dasharray: 3 3;
 }
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+  cursor: pointer;
+}
 .edge.lit {
   stroke: var(--transport);
   stroke-width: 2;
