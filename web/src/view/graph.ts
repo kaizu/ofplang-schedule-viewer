@@ -7,7 +7,7 @@
  */
 
 import { edgeSegments, GRAPH_METRICS, layoutGraph, type GraphLayout, type LaidEdge, type LaidNode } from "../layout/graph";
-import type { GraphNode } from "../model/graph";
+import { edgeKey, type GraphNode } from "../model/graph";
 
 const { HEADER_H, PORT_ROW, BOX_HEADER } = GRAPH_METRICS;
 
@@ -37,6 +37,11 @@ export interface GraphOptions {
   };
   /** A selected box traces the dataflow *inside* it, when it is open. */
   readonly subtree?: string;
+  /**
+   * The connections a selected Object runs along, as `edgeKey`s — every
+   * level of nesting, of which only the open ones are drawn (`arcRoute`).
+   */
+  readonly edges?: ReadonlySet<string>;
 }
 
 export interface GraphRender {
@@ -84,6 +89,7 @@ export function renderGraph(root: GraphNode, opts: GraphOptions): GraphRender {
     root === "" || key === root || key.startsWith(`${root}.`);
 
   const traced = (e: (typeof layout.edges)[number]): boolean => {
+    if (opts.edges) return opts.edges.has(edgeKey(e));
     if (opts.arc) {
       if (e.fromKey !== opts.arc.fromKey || e.toKey !== opts.arc.toKey) return false;
       const source = all.find((n) => n.key === e.fromKey);

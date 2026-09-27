@@ -75,6 +75,28 @@ test("the Object view (design.md §23)", async ({ page }) => {
   }
 });
 
+test("an Object picked, in both panes", async ({ page }) => {
+  await page.goto("/?doc=storage");
+  await settle(page);
+  await page.locator('#views button[data-view="object"]').click();
+  await page.locator('#gutter [data-o="create:PrepB.plate"]').click();
+  await shot(page, "storage.object.picked");
+
+  await page.goto("/?doc=plate_batch");
+  await settle(page);
+  await page.locator('#views button[data-view="object"]').click();
+  // A bar, not the label: in this view a bar picks its lane's Object.
+  await page.locator('#plot rect.bar.processing[data-o="create:source.plate_2"]').nth(3).click();
+  await shot(page, "plate_batch.object.picked.collapsed");
+  await page.locator("#expand-all").click();
+  await page.locator("#graph-fit").click();
+  await shot(page, "plate_batch.object.picked.expanded");
+
+  // The same Object stays picked in another view, lit by its activities.
+  await page.locator('#views button[data-view="device"]').click();
+  await shot(page, "plate_batch.object.picked.device");
+});
+
 test("the workflow graph, and the link between the panes", async ({ page }) => {
   await page.goto("/?doc=plate_batch");
   await settle(page);

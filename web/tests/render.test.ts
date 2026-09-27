@@ -9,12 +9,15 @@
 import { describe, expect, it } from "vitest";
 
 import { deviceOf } from "../src/model/common";
+import { arcRoute, buildGraph, compositeKeys, edgeKey } from "../src/model/graph";
 import { traceObjects } from "../src/model/objects";
 import { buildScene } from "../src/model/scene";
 import { GANTT_VIEWS, activityLabel, ganttLayout } from "../src/layout/gantt";
 import { makeScale, niceStep, unitAbbrev } from "../src/layout/scale";
 import { readEnvironmentText, readExecutionDocumentText, readWorkflowText } from "../src/read";
 import { renderGantt } from "../src/view/gantt";
+import { renderGraph } from "../src/view/graph";
+import { renderObjectDetail } from "../src/view/inspector";
 import { documentFiles, read, triples } from "./golden/corpus";
 
 /** The views with a bar for every activity. The Object view has one for
@@ -416,22 +419,91 @@ describe("the Object view (design.md §23)", () => {
 
   it("renders a wait as a thin line that carries its Object and no activity", () => {
     const g = renderGantt(withWorkflow("storage"), { view: "object", baseWidth: 800, zoom: 1, lit: new Set(), showLabels: true });
-    const waits = g.plot.match(/<rect class="bar waiting"[^>]*>/g) ?? [];
-    expect(waits.length).toBeGreaterThan(0);
-    for (const w of waits) {
+    const lines = g.plot.match(/<rect class="bar waiting"[^>]*>/g) ?? [];
+    const hits = g.plot.match(/<rect class="wait-hit"[^>]*>/g) ?? [];
+    expect(lines.length).toBeGreaterThan(0);
+    for (const w of lines) expect(w).toMatch(/height="2"/);
+    // The line is drawn; the band over it, the height of a bar, is what is hit.
+    expect(hits).toHaveLength(lines.length);
+    for (const w of hits) {
       expect(w).toMatch(/data-o="create:Prep[ABC]\.plate"/);
       expect(w).not.toMatch(/data-i=/);
-      expect(w).toMatch(/height="2"/);
+      expect(w).toMatch(/data-wait="\d+ \d+"/);
     }
   });
 
   it("keeps the end of a label too long for the gutter, where Objects differ", () => {
     const g = renderGantt(withWorkflow("reformatter"), { view: "object", baseWidth: 800, zoom: 1, lit: new Set(), showLabels: true });
-    const shown = [...g.gutter.matchAll(/<text class="lane-label"[^>]*>(?:<title>([^<]*)<\/title>)?([^<]*)<\/text>/g)];
+    const shown = [...g.gutter.matchAll(/<text[^>]*class="lane-label[^"]*"[^>]*>(?:<title>([^<]*)<\/title>)?([^<]*)<\/text>/g)];
     expect(shown).toHaveLength(12);
     // Every lane still reads differently, and a clipped one carries its whole label.
     expect(new Set(shown.map((m) => m[2])).size).toBe(12);
     const clipped = shown.find((m) => m[1] === "Preparation.prep_out_a3_24")!;
     expect(clipped[2]).toMatch(/^Prepar….*prep_out_a3_24$/);
+  });
+});
+
+describe("an Object picked (design.md D58-2)", () => {
+  const withWorkflow = (name: string) => {
+    const t = triples.find((x) => x.name === name)!;
+    return buildScene(
+      readExecutionDocumentText(read(...t.plan)),
+      readEnvironmentText(read(...t.environment)),
+      readWorkflowText(read(...t.workflow)),
+    );
+  };
+  const opts = { view: "object" as const, baseWidth: 800, zoom: 1, showLabels: true };
+
+  it("lights its own lane and no other, even where a step is shared", () => {
+    // reformatter: BiomekA4_16 consumes two plates, so it is on two lanes.
+    const scene = withWorkflow("reformatter");
+    const tracing = traceObjects(scene);
+    if (!tracing.ok) throw new Error("reformatter does not trace");
+    const picked = tracing.traces.find((t) => t.where === "Reformatter12.rf12_out_a4")!;
+    const other = tracing.traces.find((t) => t.where === "Motoman7.motoman_out_a4")!;
+    const shared = picked.activities.filter((i) => other.activities.includes(i));
+    expect(shared.length).toBeGreaterThan(0);
+
+    const g = renderGantt(scene, { ...opts, lit: new Set(picked.activities), litObject: picked.id });
+    const rects = [...g.plot.matchAll(/<rect class="bar ([^"]*)" data-i="(\d+)" data-o="([^"]+)"/g)];
+    for (const [, cls, i, o] of rects) {
+      if (!shared.includes(Number(i))) continue;
+      expect(cls!.split(" ").includes("lit"), `${o} #${i}`).toBe(o === picked.id);
+      expect(cls!.split(" ").includes("dim"), `${o} #${i}`).toBe(o !== picked.id);
+    }
+    // Its label is the one marked, and every label can pick its Object.
+    expect(g.gutter.match(/class="lane-label pick lit"/g)).toHaveLength(1);
+    expect(g.gutter.match(/data-o=/g)).toHaveLength(tracing.traces.length);
+  });
+
+  it("the panel says where it came from, where it ended, and each stretch between", () => {
+    const scene = withWorkflow("storage");
+    const tracing = traceObjects(scene);
+    if (!tracing.ok) throw new Error("storage does not trace");
+    const html = renderObjectDetail(scene, tracing.traces[2]!);
+    expect(html).toContain("Plate · PrepC.plate");
+    expect(html).toContain("created by PrepC.plate");
+    expect(html).toContain("consumed by ReadC.plate");
+    expect(html).toContain("resting (device free)");
+    // PrepC's plate waits on the bench from 80 to 220 before its move.
+    expect(html).toMatch(/waiting on a spot · prep\.bench_1/);
+  });
+});
+
+describe("the graph lights the connections an Object runs along", () => {
+  it("only those, and at the depth that is open", () => {
+    const t = triples.find((x) => x.name === "plate_batch")!;
+    const wf = readWorkflowText(read(...t.workflow));
+    const graph = buildGraph(wf);
+    const route = arcRoute(graph, {
+      from: { node: ["source"], port: "plate_1" },
+      to: { node: ["b1", "rep1", "peal"], port: "plate" },
+    })!;
+    const edges = new Set(route.map(edgeKey));
+    const lit = (expanded: Set<string>) =>
+      (renderGraph(graph, { expanded, lit: new Set(["source"]), onPath: new Set(), edges }).svg.match(/class="edge lit"/g) ?? []).length;
+    // Closed, only the edge into b1 is on screen; open, the whole way down.
+    expect(lit(new Set())).toBe(1);
+    expect(lit(new Set(compositeKeys(graph)))).toBe(3);
   });
 });

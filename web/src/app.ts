@@ -13,13 +13,15 @@ import { parse as parseYaml } from "yaml";
 import { GANTT_VIEWS, type GanttView } from "./layout/gantt";
 import {
   ancestorKeys,
+  arcRoute,
   buildGraph,
   compositeKeys,
+  edgeKey,
   findNode,
   visibleFor,
   type GraphNode,
 } from "./model/graph";
-import { tracingOf } from "./model/objects";
+import { tracingOf, type ObjectTrace } from "./model/objects";
 import { accessesDevices, activitiesUnder, buildScene, sameArc, type Scene } from "./model/scene";
 import {
   carriesLabel,
@@ -57,9 +59,11 @@ import {
   renderInspector,
   renderEdgeDetail,
   renderNodeDetail,
+  renderObjectDetail,
   renderWorkflowOverview,
   statusLine,
   tooltipFor,
+  waitTooltip,
 } from "./view/inspector";
 import { formatDuration } from "./layout/scale";
 
@@ -99,6 +103,8 @@ const isLayout = (v: unknown): v is Layout => LAYOUTS.some((l) => l.id === v);
 /** What is picked, in whichever pane the person picked it. */
 type Selection =
   | { kind: "activity"; index: number }
+  /** An Object, picked in the Object view (design.md D58-2). */
+  | { kind: "object"; id: string }
   | { kind: "node"; key: string }
   | ({ kind: "edge" } & EdgeRef);
 
@@ -153,6 +159,10 @@ function litActivities(): Set<number> {
     for (const i of sameArc(scene, sel.index)) out.add(i);
     return out;
   }
+  if (sel.kind === "object") {
+    for (const i of selectedTrace()?.activities ?? []) out.add(i);
+    return out;
+  }
   if (sel.kind === "edge") {
     for (const i of movesOn(sel)) out.add(i);
     return out;
@@ -168,6 +178,17 @@ interface Highlight {
   readonly arc?: { fromKey: string; fromPort: string; toKey: string; toPort: string };
   /** The box whose internal dataflow to trace, if that is the selection. */
   readonly subtree?: string;
+  /** Every connection a selected Object runs along, as `edgeKey`s. */
+  readonly edges?: Set<string>;
+}
+
+/** The selected Object's lifeline, if an Object is the selection and it traces. */
+function selectedTrace(): ObjectTrace | undefined {
+  const scene = state.scene;
+  const sel = state.selected;
+  if (!scene || sel?.kind !== "object") return undefined;
+  const tracing = tracingOf(scene);
+  return tracing.ok ? tracing.traces.find((t) => t.id === sel.id) : undefined;
 }
 
 function litNodes(): Highlight {
@@ -194,6 +215,27 @@ function litNodes(): Highlight {
     lit.add(sel.key);
     for (const k of ancestorKeys(sel.key === "" ? [] : sel.key.split("."))) onPath.add(k);
     return { lit, onPath, subtree: sel.key };
+  }
+  if (sel.kind === "object") {
+    // The steps it passes through light, and the chain of connections that
+    // carries it — at every depth, so opening a composite keeps the chain.
+    const trace = selectedTrace();
+    const edges = new Set<string>();
+    if (!trace || !scene) return { lit, onPath, edges };
+    for (const i of trace.activities) {
+      const a = scene.activities[i]!;
+      if (a.kind !== "processing") continue;
+      const key = visibleFor(graph, a.node, state.expanded);
+      if (key !== undefined) lit.add(key);
+      for (const k of ancestorKeys(a.node)) onPath.add(k);
+    }
+    for (const key of trace.arcs) {
+      const a = scene.activities[scene.byArc.get(key)![0]!]!;
+      if (a.kind !== "transport" && a.kind !== "relay") continue;
+      for (const e of arcRoute(graph, a.arc) ?? []) edges.add(edgeKey(e));
+    }
+    for (const k of lit) onPath.delete(k);
+    return { lit, onPath, edges };
   }
   if (scene) {
     const activity = scene.activities[sel.index];
@@ -471,8 +513,11 @@ function renderAll(): void {
   el("ro-count").textContent = scene ? String(scene.activities.length) : "—";
   el("status-source").textContent = state.source;
 
+  const trace = selectedTrace();
   el("status-selection").textContent =
-    sel?.kind === "edge"
+    trace
+      ? `Selected Object · ${trace.label}`
+      : sel?.kind === "edge"
       ? `Selected connection · ${edgeLabel(sel)}`
       : sel?.kind === "node"
       ? `Selected node · ${sel.key || graph?.process || "entry"}`
@@ -481,7 +526,9 @@ function renderAll(): void {
         : "Nothing selected — click a box";
 
   el("inspector").innerHTML =
-    sel?.kind === "edge"
+    trace && scene
+      ? renderObjectDetail(scene, trace)
+      : sel?.kind === "edge"
       ? renderEdgeDetail(edgeLabel(sel), carriesLabel(sel), sel.object, scene, movesOn(sel))
       : sel?.kind === "node" && graph
       ? renderNodeDetail(graph, sel.key, scene)
@@ -544,13 +591,14 @@ function renderGraphPane(): void {
     return;
   }
 
-  const { lit, onPath, arc, subtree } = litNodes();
+  const { lit, onPath, arc, subtree, edges } = litNodes();
   const g = renderGraph(graph, {
     expanded: state.expanded,
     lit,
     onPath,
     ...(arc ? { arc } : {}),
     ...(subtree !== undefined ? { subtree } : {}),
+    ...(edges ? { edges } : {}),
   });
   host.setAttribute("viewBox", g.viewBox);
   host.setAttribute("width", String(Math.round(g.width * state.graphZoom)));
@@ -640,6 +688,7 @@ function renderChart(): void {
     baseWidth: base,
     zoom: state.zoom,
     lit,
+    ...(state.selected?.kind === "object" ? { litObject: state.selected.id } : {}),
     showLabels: state.labels,
     availableHeight: el("body-row").clientHeight,
   });
@@ -924,6 +973,7 @@ function wireControls(): void {
 function same(a: Selection | undefined, b: Selection | undefined): boolean {
   if (!a || !b || a.kind !== b.kind) return false;
   if (a.kind === "activity") return a.index === (b as typeof a).index;
+  if (a.kind === "object") return a.id === (b as typeof a).id;
   if (a.kind === "node") return a.key === (b as typeof a).key;
   return edgeLabel(a) === edgeLabel(b as typeof a);
 }
@@ -941,18 +991,34 @@ function wirePointer(): void {
   const tip = el("tip");
 
   plot.addEventListener("click", (e) => {
+    // In the Object view the lane is the unit: a step two Objects share sits
+    // on both lanes, and the lane clicked says which Object was meant (D58-2).
+    const object = state.view === "object" ? (e.target as HTMLElement).closest<HTMLElement>("[data-o]") : null;
+    if (object) {
+      select({ kind: "object", id: object.dataset["o"]! });
+      return;
+    }
     const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i]");
     select(hit ? { kind: "activity", index: Number(hit.dataset["i"]) } : undefined);
   });
 
+  el("gutter").addEventListener("click", (e) => {
+    const lane = (e.target as HTMLElement).closest<HTMLElement>("[data-o]");
+    if (lane) select({ kind: "object", id: lane.dataset["o"]! });
+  });
+
   plot.addEventListener("mousemove", (e) => {
     const scene = state.scene;
-    const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i]");
+    const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-i], [data-wait]");
     if (!scene || !hit) {
       tip.style.display = "none";
       return;
     }
-    tip.innerHTML = tooltipFor(scene, Number(hit.dataset["i"]));
+    const wait = hit.dataset["wait"];
+    if (wait !== undefined) {
+      const [start, end] = wait.split(" ").map(Number) as [number, number];
+      tip.innerHTML = waitTooltip(scene, hit.dataset["o"] ?? "", start, end);
+    } else tip.innerHTML = tooltipFor(scene, Number(hit.dataset["i"]));
     placeTip(tip, e);
   });
 

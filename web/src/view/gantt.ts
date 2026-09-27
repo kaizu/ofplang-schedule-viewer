@@ -35,6 +35,11 @@ export interface GanttOptions {
   readonly zoom: number;
   /** Activity indices to emphasise; everything else dims. Empty = no selection. */
   readonly lit: ReadonlySet<number>;
+  /**
+   * A selected Object. In the Object view its own lane lights and no other —
+   * a step two Objects share is on both lanes, but only one was picked.
+   */
+  readonly litObject?: string;
   readonly showLabels: boolean;
   /** Height of the box the chart sits in; short charts grow to fill it. */
   readonly availableHeight?: number;
@@ -77,7 +82,7 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
   const height = Math.max(lanes.length * laneH + 4, 48);
   const width = Math.max(240, opts.baseWidth * opts.zoom);
   const scale = makeScale(Math.max(scene.metrics.makespan, scene.metrics.horizon), width);
-  const active = opts.lit.size > 0;
+  const active = opts.lit.size > 0 || opts.litObject !== undefined;
 
   const gutter: string[] = [];
   const plot: string[] = [];
@@ -91,9 +96,10 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
     const shown = lane.elide === "middle" ? clipMiddle(lane.label, 21) : clip(lane.label, 21);
     // A clipped label keeps its whole text as a tooltip.
     const whole = shown === lane.label ? "" : `<title>${esc(lane.label)}</title>`;
-    gutter.push(
-      `<text class="lane-label" x="10" y="${y + laneH / 2 + 3.5}">${whole}${esc(shown)}</text>`,
-    );
+    const pick = lane.object
+      ? ` data-o="${esc(lane.object)}"${lane.object === opts.litObject ? ` class="lane-label pick lit"` : ` class="lane-label pick"`}`
+      : ` class="lane-label"`;
+    gutter.push(`<text${pick} x="10" y="${y + laneH / 2 + 3.5}">${whole}${esc(shown)}</text>`);
     if (lane.tag)
       gutter.push(
         `<text class="lane-tag" x="${GUTTER_W - 8}" y="${y + laneH / 2 + 3}" text-anchor="end">${esc(lane.tag)}</text>`,
@@ -125,7 +131,10 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
   for (const bar of bars) {
     const a = bar.index === undefined ? undefined : scene.activities[bar.index];
     const y = bar.lane * laneH + (laneH - BAR_H) / 2;
-    const isLit = bar.index !== undefined && opts.lit.has(bar.index);
+    const isLit =
+      opts.litObject !== undefined && bar.object !== undefined
+        ? bar.object === opts.litObject
+        : bar.index !== undefined && opts.lit.has(bar.index);
     const on = !active || isLit;
     const cls = [
       "bar",
@@ -153,8 +162,12 @@ export function renderGantt(scene: Scene, opts: GanttOptions): GanttGeometry {
       // a lane reads as one life rather than as unrelated bars.
       const x0 = scale.x(bar.start);
       const x1 = scale.x(bar.end);
+      const w = Math.max(0, x1 - x0);
       plot.push(
-        `<rect class="${cls}"${ids} x="${x0}" y="${y + BAR_H / 2 - WAIT_H / 2}" width="${Math.max(0, x1 - x0)}" height="${WAIT_H}"/>`,
+        `<rect class="${cls}" x="${x0}" y="${y + BAR_H / 2 - WAIT_H / 2}" width="${w}" height="${WAIT_H}"/>`,
+        // A 2px line is too thin to hit: an invisible band the height of a bar
+        // carries its identity, and what the hover card says about it.
+        `<rect class="wait-hit"${ids} data-wait="${bar.start} ${bar.end}" x="${x0}" y="${y}" width="${w}" height="${BAR_H}"/>`,
       );
       continue;
     }

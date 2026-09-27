@@ -2,6 +2,7 @@
 
 import { arcKey, pathKey } from "../model/common";
 import { findNode, type GraphNode } from "../model/graph";
+import { tracingOf, type ObjectTrace, type SegmentKind } from "../model/objects";
 import { accessesDevices, activitiesUnder } from "../model/scene";
 import type { Activity } from "../model/document";
 import type { Scene } from "../model/scene";
@@ -233,6 +234,65 @@ export function renderEdgeDetail(
     out.push(block("In the plan", `<div class="note">${lines.map(esc).join("<br>")}</div>`));
   }
   return out.join("");
+}
+
+/** What each stretch of a lifeline is called, in the panel and on hover. */
+const SEGMENT_WORD: Readonly<Record<SegmentKind, string>> = {
+  processing: "in a step",
+  resting: "resting (device free)",
+  waiting: "waiting on a spot",
+  transport: "moving",
+  relay: "at a relay",
+};
+
+/** A selected Object: where it comes from, where it ends, and everything between. */
+export function renderObjectDetail(scene: Scene, t: ObjectTrace): string {
+  const unit = scene.unit;
+  const first = t.segments[0]!;
+  const last = t.segments[t.segments.length - 1]!;
+  const out = [`<div><h3>object</h3><div class="lead">${esc(t.label)}</div></div>`];
+
+  const port = (node: readonly string[], p: string): string => `${node.join(".")}.${p}`;
+  out.push(
+    block(
+      "Life",
+      dl([
+        ["type", t.type || "—"],
+        ["appears", t.origin.kind === "create" ? `created by ${port(t.origin.node, t.origin.port)}` : `entry input ${t.origin.port}`],
+        ["ends", t.fate.kind === "consume" ? `consumed by ${port(t.fate.node, t.fate.port)}` : `delivered as output ${t.fate.port}`],
+        ["from", formatDuration(first.start, unit)],
+        ["to", formatDuration(last.end, unit)],
+        ["moves", t.arcs.length],
+      ]),
+    ),
+  );
+
+  // Where its time went. Instants (a relay) take none, and are not listed.
+  const spent = new Map<SegmentKind, number>();
+  for (const s of t.segments) spent.set(s.kind, (spent.get(s.kind) ?? 0) + (s.end - s.start));
+  const order: SegmentKind[] = ["processing", "resting", "waiting", "transport"];
+  const rows = order.filter((k) => (spent.get(k) ?? 0) > 0).map((k) => [SEGMENT_WORD[k], formatDuration(spent.get(k)!, unit)] as const);
+  if (rows.length) out.push(block("Time", dl(rows)));
+
+  const lines = t.segments.map((s) => {
+    const a = s.activity === undefined ? undefined : scene.activities[s.activity];
+    const what = a ? activityLabel(a) : s.from ?? "";
+    const where = a && a.kind === "processing" && s.from ? ` · ${s.from}` : "";
+    return `${formatDuration(s.start, unit)} – ${formatDuration(s.end, unit)} · ${SEGMENT_WORD[s.kind]} · ${what}${where}`;
+  });
+  out.push(block("Journey", `<div class="note">${lines.map(esc).join("<br>")}</div>`));
+  return out.join("");
+}
+
+/** The hover card for a wait, which is no activity: where, and for how long. */
+export function waitTooltip(scene: Scene, object: string, start: number, end: number): string {
+  const tracing = tracingOf(scene);
+  const t = tracing.ok ? tracing.traces.find((x) => x.id === object) : undefined;
+  const spot = t?.segments.find((s) => s.kind === "waiting" && s.start === start && s.end === end)?.from ?? "";
+  const unit = unitAbbrev(scene.unit);
+  const lines = [`${start} – ${end} ${unit}  (${end - start})`];
+  if (t) lines.push(t.label);
+  return `<div class="tt">${esc(`waiting on ${spot}`)}</div><div class="tl">${lines.map(esc).join("<br>")}</div>`;
 }
 
 /** The hover card. */

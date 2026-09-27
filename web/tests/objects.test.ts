@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
+import { arcRoute, buildGraph, compositeKeys, edgeKey } from "../src/model/graph";
+import { layoutGraph } from "../src/layout/graph";
 import { objectsOf, traceObjects, unaccountedPorts, type ObjectTrace } from "../src/model/objects";
 import { buildScene, type Scene } from "../src/model/scene";
 import type { AtomicProcess, Workflow } from "../src/model/workflow";
@@ -274,5 +276,36 @@ describe("a lifeline that cannot be followed is not drawn", () => {
     const wf = parse(readFileSync(join(CURATED, "data_flow.workflow.yaml"), "utf8"));
     const t = traceObjects(buildScene(readExecutionDocument(plan), undefined, readWorkflow(wf)));
     expect(t.ok ? [] : t.reasons).toEqual(["Measure.plate: the plan brings no Object to it"]);
+  });
+});
+
+/* ── the route an arc takes through the drawn graph ────────────────── */
+
+describe("every plan arc runs along connections the graph draws", () => {
+  for (const [name, scene] of plans) {
+    if (!scene.workflow) continue;
+    it(name, () => {
+      const graph = buildGraph(scene.workflow!);
+      const drawn = new Set(layoutGraph(graph, new Set(compositeKeys(graph))).edges.map(edgeKey));
+      for (const [key, legs] of scene.byArc) {
+        const a = scene.activities[legs[0]!]!;
+        if (!("arc" in a)) continue;
+        const route = arcRoute(graph, a.arc);
+        expect(route, key).toBeDefined();
+        expect(route!.length, key).toBeGreaterThan(0);
+        // Fully open, every step of the route is on screen.
+        for (const e of route!) expect(drawn.has(edgeKey(e)), `${key}: ${edgeKey(e)}`).toBe(true);
+      }
+    });
+  }
+
+  it("into a nested composite, the route crosses each border it passes", () => {
+    const [, scene] = plans.find(([n]) => n === "plate_batch.plan.yaml")!;
+    const graph = buildGraph(scene.workflow!);
+    const route = arcRoute(graph, {
+      from: { node: ["source"], port: "plate_1" },
+      to: { node: ["b1", "rep1", "peal"], port: "plate" },
+    })!;
+    expect(route.map((e) => `${e.fromKey}>${e.toKey}`)).toEqual(["source>b1", "b1>b1.rep1", "b1.rep1>b1.rep1.peal"]);
   });
 });

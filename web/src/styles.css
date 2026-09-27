@@ -685,6 +685,16 @@ svg {
   fill: var(--muted);
   rx: 0;
 }
+.wait-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.lane-label.pick {
+  cursor: pointer;
+}
+.lane-label.lit {
+  font-weight: 600;
+}
 .bar.held {
   /* A 4px band: at this size a hatch is illegible and a rounded outline reads
      as a glyph, so the encoding is size and position instead — the same hue as

@@ -51,6 +51,8 @@ export interface Lane {
    * beside `Preparation.prep_out_rf12`.
    */
   readonly elide?: "middle";
+  /** The Object this lane follows, in the Object view — its label selects it. */
+  readonly object?: string;
 }
 
 export interface Bar {
@@ -286,7 +288,7 @@ function objectLayout(scene: Scene): GanttLayout {
         label: a ? barLabel(a) : "",
       });
     }
-    return { id: t.id, label: t.where, tag: t.type, elide: "middle" as const };
+    return { id: t.id, label: t.where, tag: t.type, elide: "middle" as const, object: t.id };
   });
   return { lanes, bars };
 }

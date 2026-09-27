@@ -8,7 +8,7 @@
  * to the individual copies stays one click away.
  */
 
-import { pathKey, type NodePath } from "./common";
+import { pathKey, type ArcRef, type NodePath } from "./common";
 import type { Workflow } from "./workflow";
 
 export interface Binding {
@@ -157,4 +157,80 @@ export function ancestorKeys(path: NodePath): string[] {
   const out: string[] = [];
   for (let i = 1; i < path.length; i++) out.push(pathKey(path.slice(0, i)));
   return out;
+}
+
+/**
+ * One drawn connection, as the graph names it: a binding or a return between
+ * two boxes, each end the box's key and one of its ports. A container's own
+ * border is its key too — an edge from its input, or back out to its output.
+ */
+export interface EdgeId {
+  readonly fromKey: string;
+  readonly fromPort: string;
+  readonly toKey: string;
+  readonly toPort: string;
+}
+
+export const edgeKey = (e: EdgeId): string => `${e.fromKey}|${e.fromPort}>${e.toKey}|${e.toPort}`;
+
+/**
+ * The connections a plan arc runs along, at every level of nesting.
+ *
+ * A plan arc joins two atomic steps (§6.4); the graph draws the bindings that
+ * get it there — out of a composite by its `returns`, across a body by a
+ * sibling binding, into a composite by its `inputs.` binding. Which of them
+ * are on screen depends on what is open, so all of them are returned and
+ * the view lights the ones it draws. Undefined if the workflow does not lead
+ * from one end to the other: the arc is then not this workflow's.
+ */
+export function arcRoute(root: GraphNode, arc: ArcRef): EdgeId[] | undefined {
+  const parents = new Map<string, GraphNode>();
+  const walk = (n: GraphNode): void => {
+    for (const c of n.children) {
+      parents.set(c.key, n);
+      walk(c);
+    }
+  };
+  walk(root);
+
+  const route: EdgeId[] = [];
+  // Where the Object is: an output of `from`, or — when `from` is the
+  // container being searched — that container's own input.
+  let container: GraphNode;
+  let from: GraphNode;
+  let port = arc.from.port;
+  if (arc.from.node.length === 0) {
+    container = from = root;
+  } else {
+    const n = findNode(root, pathKey(arc.from.node));
+    const parent = n && parents.get(n.key);
+    if (!n || !parent) return undefined;
+    container = parent;
+    from = n;
+  }
+
+  // Each step moves one binding; a workflow is finite, so is the route.
+  for (let guard = 0; guard < 1000; guard++) {
+    const source = from === container ? `inputs.${port}` : `${from.id}.${port}`;
+    const next = container.children.find((c) =>
+      Object.entries(c.bindings).some(([, b]) => b.object && b.from === source),
+    );
+    if (next) {
+      const toPort = Object.entries(next.bindings).find(([, b]) => b.object && b.from === source)![0];
+      route.push({ fromKey: from.key, fromPort: port, toKey: next.key, toPort });
+      if (next.kind === "atomic")
+        return pathKey(next.path) === pathKey(arc.to.node) && toPort === arc.to.port ? route : undefined;
+      container = from = next;
+      port = toPort;
+      continue;
+    }
+    const out = from === container ? undefined : Object.entries(container.returns).find(([, src]) => src === source)?.[0];
+    if (out === undefined) return undefined;
+    route.push({ fromKey: from.key, fromPort: port, toKey: container.key, toPort: out });
+    if (container === root) return arc.to.node.length === 0 && arc.to.port === out ? route : undefined;
+    from = container;
+    container = parents.get(container.key)!;
+    port = out;
+  }
+  return undefined;
 }
