@@ -1,6 +1,7 @@
 # ofplang export
 
 [![CI](https://github.com/ofplang/export/actions/workflows/ci.yml/badge.svg)](https://github.com/ofplang/export/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ofplang-export.svg)](https://pypi.org/project/ofplang-export/)
 
 Readable views of [ofplang](https://github.com/ofplang/spec) documents: a
 workflow as its dataflow graph, and the execution plans
