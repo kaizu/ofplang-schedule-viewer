@@ -1,13 +1,18 @@
-# ofplang-schedule-viewer
+# ofplang export
 
-A static web viewer for the execution plans produced by
-[`ofp-schedule`](https://github.com/ofplang/schedule), shown against the
-[ofplang](https://github.com/ofplang/spec) workflow they came from.
+[![CI](https://github.com/ofplang/export/actions/workflows/ci.yml/badge.svg)](https://github.com/ofplang/export/actions/workflows/ci.yml)
 
-The name says the scope: this visualises **`ofp-schedule`'s output**. Views
-specific to `ofp-run` or `labcode` are not in it.
+Readable views of [ofplang](https://github.com/ofplang/spec) documents: a
+workflow as its dataflow graph, and the execution plans
+[`ofp-schedule`](https://github.com/ofplang/schedule) produces from it, shown
+side by side and linked — as a web site, and as one self-contained HTML file.
 
-**→ [kaizu.github.io/ofplang-schedule-viewer](https://kaizu.github.io/ofplang-schedule-viewer/)**
+It reads the documents the ofplang specifications define and nothing more, so
+it does not depend on any dialect built on top of them. The command that
+writes the single file, `ofp-export`, is next (it will also be reachable as
+`ofp export` and `lc export`).
+
+**→ [ofplang.github.io/export](https://ofplang.github.io/export/)**
 — ten plans are bundled; `?doc=plate_batch` opens one directly. Drop your own
 YAML on the window to read that instead: a plan, a workflow, an environment, or
 all three at once. A workflow on its own is fine — the graph does not need a
@@ -77,7 +82,7 @@ rather than guessed at.
 ## Working on it
 
 ```sh
-git clone --recurse-submodules git@github.com:kaizu/ofplang-schedule-viewer.git
+git clone --recurse-submodules git@github.com:ofplang/export.git
 cd web
 npm install
 

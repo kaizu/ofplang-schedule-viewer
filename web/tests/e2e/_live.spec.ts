@@ -1,7 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+// A look at the deployed site, run by hand: `LIVE=1 npx playwright test _live`.
+// Never in CI — the site is deployed only after CI passes, so a check against
+// it there would wait on itself (and a first deploy would never happen).
+test.skip(!process.env["LIVE"], "set LIVE=1 to check the published site");
+
 test("the published site", async ({ page }) => {
-  await page.goto("https://kaizu.github.io/ofplang-schedule-viewer/?doc=plate_batch");
+  await page.goto("https://ofplang.github.io/export/?doc=plate_batch");
   await expect(page.locator("#plot rect.bar").first()).toBeVisible({ timeout: 20000 });
   await page.evaluate(() => document.fonts.ready);
   console.log(

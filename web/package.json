@@ -1,5 +1,5 @@
 {
-  "name": "ofplang-schedule-viewer",
+  "name": "ofplang-export-web",
   "private": true,
   "type": "module",
   "scripts": {
