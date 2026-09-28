@@ -268,3 +268,22 @@ test("a thin page brings the viewer from the CDN and draws the same (D68)", asyn
   // The viewer, and the fonts it asks for; nothing else.
   expect(fetched.filter((u) => !u.startsWith("file:") && u !== url && !/fonts\.(googleapis|gstatic)\.com/.test(u))).toEqual([]);
 });
+
+test("a page written to start without the details pane starts without it, even wide (D70)", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openWith(
+    page,
+    {
+      name: "simple.plan.yaml",
+      plan: example("outputs/simple.plan.yaml"),
+      workflow: example("simple.workflow.yaml"),
+      ui: { details: "hide" },
+    },
+    info.outputPath("no-details.html"),
+  );
+  await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+  await expect(page.locator("aside")).toBeHidden();
+  await expect(page.locator("#details")).toHaveAttribute("aria-pressed", "false");
+  await page.locator("#details").click();
+  await expect(page.locator("aside")).toBeVisible();
+});

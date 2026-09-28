@@ -265,6 +265,22 @@ main {
     display: none;
   }
 }
+/* The details pane as the person set it (D70): by default it follows the
+   width, as above; hidden it gives the panes its column at any width — an
+   artifact beside a conversation is wide enough to keep it, and too narrow
+   to spare it — and shown it stays even where the width would fold it. */
+#app[data-details="hide"] main {
+  grid-template-columns: minmax(0, 1fr);
+}
+#app[data-details="hide"] aside {
+  display: none;
+}
+#app[data-details="show"] main {
+  grid-template-columns: minmax(0, 1fr) 296px;
+}
+#app[data-details="show"] aside {
+  display: block;
+}
 
 /* Graph over Gantt, with a handle between them (D16). */
 .stack {

@@ -25,6 +25,8 @@ export interface SharePayload {
     readonly expanded?: readonly string[];
     /** Only when the person chose one; otherwise the documents decide (D46). */
     readonly layout?: string;
+    /** Only when the person set it; otherwise the width decides (D70). */
+    readonly details?: "show" | "hide";
   };
 }
 

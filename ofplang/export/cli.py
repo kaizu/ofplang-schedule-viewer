@@ -37,6 +37,7 @@ EXIT_REFUSED = 3
 
 LAYOUTS = ("split", "workflow", "plan")
 GANTT_VIEWS = ("device", "flow", "activity", "object")
+DETAILS = ("show", "hide")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -72,6 +73,14 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "Gantt view to open on (default: device). `object` follows each Object through the plan; "
             "it needs the workflow, and the page opens on device where the Objects cannot be told apart"
+        ),
+    )
+    v.add_argument(
+        "--details",
+        choices=DETAILS,
+        help=(
+            "whether the pane with the details of what is selected starts shown or hidden (default: "
+            "shown where the window is wide enough); the page has a button for it either way"
         ),
     )
     v.add_argument(
@@ -160,7 +169,7 @@ def _view(args: argparse.Namespace) -> int:
         doc = docs.get(kind)
         if doc is not None:
             payload[kind] = doc.text
-    ui = {k: v for k, v in (("layout", args.layout), ("view", args.gantt)) if v}
+    ui = {k: v for k, v in (("layout", args.layout), ("view", args.gantt), ("details", args.details)) if v}
     if ui:
         payload["ui"] = ui
 

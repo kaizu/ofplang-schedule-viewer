@@ -131,6 +131,8 @@ interface State {
   split: number;
   /** A layout the person chose. Absent means "decided by what was loaded". */
   layout?: Layout;
+  /** The details pane as set (D70). Absent means "as the width allows". */
+  details?: "show" | "hide";
   /** Kept so a share link can carry exactly what was loaded. */
   raw?: { plan: unknown; workflow: unknown; environment: unknown };
 }
@@ -368,6 +370,7 @@ export async function start(): Promise<void> {
     );
     if (shared.ui?.view) state.view = shared.ui.view as GanttView;
     if (isLayout(shared.ui?.layout)) state.layout = shared.ui.layout;
+    if (isDetails(shared.ui?.details)) state.details = shared.ui.details;
     if (shared.ui?.expanded) state.expanded = new Set(shared.ui.expanded);
     buildViewButtons();
     markExternal("shared link");
@@ -398,8 +401,8 @@ interface EmbeddedDocuments {
   readonly plan?: string;
   readonly workflow?: string;
   readonly environment?: string;
-  /** What to open on, when the writer said (`ofp-export view --layout / --gantt`). */
-  readonly ui?: { readonly layout?: string; readonly view?: string };
+  /** What to open on, when the writer said (`ofp-export view --layout / --gantt / --details`). */
+  readonly ui?: { readonly layout?: string; readonly view?: string; readonly details?: string };
 }
 
 /**
@@ -441,6 +444,7 @@ function startEmbedded(json: string): void {
     adopt(raw, name, "Embedded in this file.");
     // Unknown values are ignored rather than refused: a newer writer may know more.
     if (isLayout(docs.ui?.layout)) state.layout = docs.ui.layout;
+    if (isDetails(docs.ui?.details)) state.details = docs.ui.details;
     const view = GANTT_VIEWS.find((v) => v.id === docs.ui?.view);
     if (view) {
       state.view = view.id;
@@ -588,9 +592,19 @@ function currentLayout(): Layout {
   return "split";
 }
 
+/** Below this width the details pane folds away unless the person keeps it (styles.css). */
+const NARROW = window.matchMedia("(max-width: 1040px)");
+
+const isDetails = (v: unknown): v is "show" | "hide" => v === "show" || v === "hide";
+
+/** Whether the details pane is on screen: as set, or as the width allows. */
+const detailsShown = (): boolean => (state.details ? state.details === "show" : !NARROW.matches);
+
 function renderLayout(): void {
   const layout = currentLayout();
   const has = available();
+  el("app").dataset["details"] = state.details ?? "auto";
+  el("details").setAttribute("aria-pressed", String(detailsShown()));
   el("stack").dataset["layout"] = layout;
   el("graph-pane").hidden = layout === "plan";
   el("plan-pane").hidden = layout === "workflow";
@@ -874,6 +888,17 @@ function wireControls(): void {
     fitGraph();
   });
 
+  // Flips what is on screen, whatever set it: a pane the width folded away
+  // comes back, and one it kept goes.
+  el("details").addEventListener("click", () => {
+    state.details = detailsShown() ? "hide" : "show";
+    renderLayout();
+    renderChart();
+    renderGraphPane();
+  });
+  // Crossing the width changes what "as the width allows" means.
+  NARROW.addEventListener("change", () => renderLayout());
+
   el<HTMLSelectElement>("dataset").addEventListener("change", (e) => {
     const id = (e.target as HTMLSelectElement).value;
     if (id === DROPPED) return;
@@ -956,6 +981,7 @@ function wireControls(): void {
           view: state.view,
           expanded: [...state.expanded],
           ...(state.layout ? { layout: state.layout } : {}),
+          ...(state.details ? { details: state.details } : {}),
         },
       },
       flash,

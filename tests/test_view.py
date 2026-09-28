@@ -170,6 +170,23 @@ def test_help_is_ascii_so_any_console_can_print_it(argv, capsys):
     assert text.isascii(), sorted({c for c in text if not c.isascii()})
 
 
+def test_the_details_pane_can_be_written_to_start_hidden(tmp_path, template, capsys):
+    # For a narrow page such as an artifact (design.md D70); the page keeps its button.
+    out = tmp_path / "d.html"
+    code, _, err = run(
+        capsys,
+        str(OUTPUTS / "storage.plan.yaml"),
+        "--details",
+        "hide",
+        "-o",
+        str(out),
+        "--template",
+        str(template),
+    )
+    assert code == EXIT_OK, err
+    assert payload_of(out.read_text(encoding="utf-8"))["ui"] == {"details": "hide"}
+
+
 # ── a thin page (design.md D68) ────────────────────────────────────────────
 
 
