@@ -91,15 +91,18 @@ export function edgeSegments(e: LaidEdge): [Point, Point, Point, Point][] {
     const dx = Math.max(24, (b.x - a.x) / 2);
     return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b];
   };
+  const same = (a: Point, b: Point): boolean => Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
   const out: [Point, Point, Point, Point][] = [];
   let at: Point = e.from;
   for (const w of e.route ?? []) {
     const enter = { x: w.x0, y: w.y };
     const leave = { x: w.x1, y: w.y };
-    out.push(curve(at, enter), [enter, enter, leave, leave]);
+    // A run beside a narrow box begins at its port: nothing to bend first (D66).
+    if (!same(at, enter)) out.push(curve(at, enter));
+    out.push([enter, enter, leave, leave]);
     at = leave;
   }
-  out.push(curve(at, e.to));
+  if (!same(at, e.to)) out.push(curve(at, e.to));
   return out;
 }
 
@@ -118,8 +121,17 @@ interface Sized {
   readonly open: boolean;
   readonly w: number;
   readonly h: number;
-  /** Relative to this node's own origin. */
-  readonly placed: { readonly sized: Sized; readonly x: number; readonly y: number }[];
+  /**
+   * Relative to this node's own origin, with the column each child stands in:
+   * a box narrower than its column is centred in it, and an arc to or from it
+   * runs level across the slack (`leadIn` / `leadOut`).
+   */
+  readonly placed: {
+    readonly sized: Sized;
+    readonly x: number;
+    readonly y: number;
+    readonly col: { readonly x: number; readonly w: number };
+  }[];
   /** Lanes through skipped columns, by connection id (`laneId`), relative to this origin. */
   readonly lanes: Readonly<Record<string, readonly Waypoint[]>>;
 }
@@ -152,6 +164,24 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
     if (!s.open) return;
 
     const byId = new Map(s.placed.map((p) => [p.sized.node.id, p]));
+
+    // An arc changes height only in the gap between two columns, where nothing
+    // is drawn. Beside a box narrower than its column it runs level: out from
+    // the box's right edge to the column's, and in from the column's left edge
+    // to the box. Boxes in a column never overlap in height, so a level run at
+    // a port's height meets no other box — without it the curve bent inside
+    // the column and could cut the corner of an open neighbour (design.md D66).
+    const leadOut = (src: (typeof s.placed)[number], at: Anchor): Waypoint[] => {
+      const edge = ox + src.col.x + src.col.w;
+      return at.x < edge - 0.5 ? [{ x0: at.x, x1: edge, y: at.y }] : [];
+    };
+    const leadIn = (dst: (typeof s.placed)[number], at: Anchor): Waypoint[] => {
+      const edge = ox + dst.col.x;
+      return at.x > edge + 0.5 ? [{ x0: edge, x1: at.x, y: at.y }] : [];
+    };
+    const through = (id: string): Waypoint[] =>
+      (s.lanes[id] ?? []).map((w) => ({ x0: w.x0 + ox, x1: w.x1 + ox, y: w.y + oy }));
+    const routeOf = (ws: Waypoint[]): { route?: Waypoint[] } => (ws.length ? { route: ws } : {});
     const anchorsOf = (p: { sized: Sized; x: number; y: number }) => ({
       inputs: inputAnchors(p.sized).map((a) => ({ ...a, x: a.x + ox + p.x, y: a.y + oy + p.y })),
       outputs: outputAnchors(p.sized).map((a) => ({ ...a, x: a.x + ox + p.x, y: a.y + oy + p.y })),
@@ -169,6 +199,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
 
         let from: Anchor | undefined;
         let fromKey: string;
+        let source: (typeof s.placed)[number] | undefined;
         // Typed here, where it is known which side of which box the port is on:
         // a box may have an input and an output of the same name (`plate`).
         let fromType: string | undefined;
@@ -183,10 +214,15 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
           from = anchorsOf(src).outputs.find((a) => a.port === tail);
           fromKey = src.sized.node.key;
           fromType = src.sized.node.outputTypes[tail];
+          source = src;
         }
         if (!from) continue;
         const toType = p.sized.node.inputTypes[port];
-        const route = s.lanes[laneId(p.sized.node.id, port)];
+        const route = [
+          ...(source ? leadOut(source, from) : []),
+          ...through(laneId(p.sized.node.id, port)),
+          ...leadIn(p, to),
+        ];
         edges.push({
           from: { x: from.x, y: from.y },
           to: { x: to.x, y: to.y },
@@ -197,7 +233,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
           toPort: port,
           ...(fromType !== undefined ? { fromType } : {}),
           ...(toType !== undefined ? { toType } : {}),
-          ...(route ? { route: route.map((w) => ({ x0: w.x0 + ox, x1: w.x1 + ox, y: w.y + oy })) } : {}),
+          ...routeOf(route),
         });
       }
     }
@@ -213,7 +249,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
       if (!from) continue;
       const fromType = src.sized.node.outputTypes[from.port];
       const toType = s.node.outputTypes[port];
-      const route = s.lanes[returnId(port)];
+      const route = [...leadOut(src, from), ...through(returnId(port))];
       edges.push({
         from: { x: from.x, y: from.y },
         to: { x: to.x, y: to.y },
@@ -224,7 +260,7 @@ export function layoutGraph(root: GraphNode, expanded: ReadonlySet<string>): Gra
         toPort: port,
         ...(fromType !== undefined ? { fromType } : {}),
         ...(toType !== undefined ? { toType } : {}),
-        ...(route ? { route: route.map((w) => ({ x0: w.x0 + ox, x1: w.x1 + ox, y: w.y + oy })) } : {}),
+        ...routeOf(route),
       });
     }
 
@@ -298,15 +334,15 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
   const lanes: Record<string, Waypoint[]> = {};
 
   if (!long.length) {
-    // Nothing skips a column: the layout as it has always been — each column
-    // in document order, centred. A lane is only ever added, so a workflow
-    // without one is drawn exactly as before (design.md D54).
+    // Nothing skips a column: each column in document order, centred. A lane
+    // is only ever added, so a workflow without one is placed as before
+    // (design.md D54); its arcs still bend only between columns (D66).
     const heights = columns.map((col) => col.reduce((sum, c) => sum + c.h, 0) + GAP_Y * (col.length - 1));
     const contentH = Math.max(Math.max(0, ...heights), 44);
     columns.forEach((column, i) => {
       let y = BOX_HEADER + BOX_PAD + (contentH - heights[i]!) / 2;
       for (const c of column) {
-        placed.push({ sized: c, x: xs[i]!.x + (xs[i]!.w - c.w) / 2, y });
+        placed.push({ sized: c, x: xs[i]!.x + (xs[i]!.w - c.w) / 2, y, col: xs[i]! });
         y += c.h + GAP_Y;
       }
     });
@@ -374,7 +410,8 @@ function measure(node: GraphNode, expanded: ReadonlySet<string>): Sized {
   items.forEach((col, c) => {
     const { x: cx, w } = xs[c]!;
     for (const it of col) {
-      if (it.kind === "node") placed.push({ sized: it.sized, x: cx + (w - it.sized.w) / 2, y: centre + top.get(it.sized)! });
+      if (it.kind === "node")
+        placed.push({ sized: it.sized, x: cx + (w - it.sized.w) / 2, y: centre + top.get(it.sized)!, col: xs[c]! });
       else (lanes[it.link.id] ??= []).push({ x0: cx, x1: cx + w, y: centre + laneAt.get(`${it.link.id}@${c}`)! });
     }
   });
