@@ -87,7 +87,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "write a thin page instead: the documents and one script tag that loads this version's "
-            "viewer from the jsdelivr CDN. A few KB rather than some 190 KB, for a page something "
+            "viewer from jsDelivr (npm). A few KB rather than some 190 KB, for a page something "
             "else has to carry, such as a claude.ai artifact; it needs the network to open"
         ),
     )

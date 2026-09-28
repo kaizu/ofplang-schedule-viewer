@@ -5,11 +5,12 @@
  * Runs after `vite build`. A thin page is the documents and one script tag:
  *
  *   <script type="application/json" id="ofp-documents" data-contract="1">…</script>
- *   <script type="module" src="https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v<version>/ofp-view.js"></script>
+ *   <script type="module" src="https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@<version>/ofp-view.js"></script>
  *
  * so the module brings everything else with it: the stylesheet, the page's
  * markup and the icon, put into the document before the viewer starts. It is
- * served from the `cdn` branch by jsdelivr, which the release workflow fills.
+ * published to npm as @ofplang/export-viewer by the release workflow (package
+ * source in web/npm/) and served by jsDelivr from /npm/ (design.md D69).
  * An artifact on claude.ai is one such page: Claude writes the documents, not
  * the 170 KB of viewer.
  */

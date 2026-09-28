@@ -234,7 +234,7 @@ test("a thin page brings the viewer from the CDN and draws the same (D68)", asyn
   // from disk. The CDN is answered from this build's dist-cdn/ofp-view.js, so
   // the test needs no network and checks the file the release publishes.
   const cdnFile = fileURLToPath(new URL("../../dist-cdn/ofp-view.js", import.meta.url));
-  const url = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-vTEST/ofp-view.js";
+  const url = "https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@0.0.0-test/ofp-view.js";
   const repo = fileURLToPath(new URL("../../../", import.meta.url));
   const out = info.outputPath("thin.html");
   const [python, ...lead] = findPython();

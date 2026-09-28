@@ -182,7 +182,7 @@ def test_a_thin_page_is_the_documents_and_one_script_from_the_cdn(tmp_path, caps
     )
     assert code == EXIT_OK, err
     html = out.read_text(encoding="utf-8")
-    url = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5/ofp-view.js"
+    url = "https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@0.1.5/ofp-view.js"
     assert f'<script type="module" src="{url}"></script>' in html
     assert json.loads(stdout)["viewer"] == url
     assert "template_build" not in json.loads(stdout)
@@ -229,7 +229,10 @@ def test_the_viewer_url_is_for_a_thin_page_only(tmp_path, capsys):
 def test_a_release_candidate_has_its_own_viewer_on_the_cdn():
     from ofplang.export.template import viewer_url
 
-    assert viewer_url("0.1.5rc1") == "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5rc1/ofp-view.js"
+    # npm spells it the semver way, and the release workflow publishes it so.
+    assert (
+        viewer_url("0.1.5rc2") == "https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@0.1.5-rc.2/ofp-view.js"
+    )
     assert viewer_url("0.1.5.post1") is None
 
 

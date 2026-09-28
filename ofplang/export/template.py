@@ -62,16 +62,26 @@ def encode(payload: dict[str, Any] | None) -> str:
     return json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
 
 
-#: Where a released version's viewer is served for a thin page (design.md D68):
-#: jsdelivr, from the `cdn` branch the release workflow tags `cdn-v<version>`.
-CDN = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v{version}/ofp-view.js"
+#: Where a released version's viewer is served for a thin page (design.md D68,
+#: D69): the npm package the release workflow publishes, through jsDelivr's
+#: /npm/ — the one path of jsDelivr a claude.ai artifact may load scripts from.
+CDN = "https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@{version}/ofp-view.js"
 
-_RELEASED = re.compile(r"\d+\.\d+\.\d+(rc\d+)?")
+_RELEASED = re.compile(r"(\d+\.\d+\.\d+)(?:rc(\d+))?")
 
 
 def viewer_url(version: str) -> str | None:
-    """This version's viewer on the CDN, or None for a build that was never tagged."""
-    return CDN.format(version=version) if _RELEASED.fullmatch(version) else None
+    """
+    This version's viewer on the CDN, or None for a build that was never tagged.
+
+    npm spells a release candidate the semver way: `0.1.5rc2` is `0.1.5-rc.2`,
+    as the release workflow publishes it.
+    """
+    m = _RELEASED.fullmatch(version)
+    if m is None:
+        return None
+    npm = m.group(1) if m.group(2) is None else f"{m.group(1)}-rc.{m.group(2)}"
+    return CDN.format(version=npm)
 
 
 def thin(payload: dict[str, Any], viewer: str) -> str:

@@ -95,16 +95,18 @@ one script tag that loads it from a CDN:
 
 ```html
 <script type="application/json" id="ofp-documents" data-contract="1">…</script>
-<script type="module" src="https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5/ofp-view.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@0.1.5/ofp-view.js"></script>
 ```
 
 That is a few kilobytes of documents rather than some 190 KB, for a page
 something else has to carry — a claude.ai artifact, which Claude writes out
 token by token. It needs the network to open. The script is the version of
 the command that wrote the page; each release builds it (`npm run build:single`
-writes `web/dist-cdn/ofp-view.js` beside the template), commits it to the
-`cdn` branch and tags it `cdn-v<version>`, and [jsdelivr](https://www.jsdelivr.com/)
-serves it from there. A development build has none, so it takes `--viewer-url`.
+writes `web/dist-cdn/ofp-view.js` beside the template) and publishes it to npm as
+[`@ofplang/export-viewer`](https://www.npmjs.com/package/@ofplang/export-viewer)
+(package source in `web/npm/`), which [jsDelivr](https://www.jsdelivr.com/) serves
+— from `/npm/`, the one path of it a claude.ai artifact may load scripts from.
+A development build has none, so it takes `--viewer-url`.
 
 ## Layout
 

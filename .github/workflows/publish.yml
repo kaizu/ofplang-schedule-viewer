@@ -43,7 +43,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci && npm run build:single
         working-directory: web
-      # The same build as a module, for thin pages (design.md D68); the `cdn` job publishes it.
+      # The same build as a module, for thin pages (design.md D68); the `npm` job publishes it.
       - uses: actions/upload-artifact@v4
         with:
           name: viewer-cdn
@@ -74,73 +74,70 @@ jobs:
           name: dist
           path: dist/
 
-  # A released version's viewer for thin pages (design.md D68): committed to the
-  # `cdn` branch and tagged `cdn-v<version>`, which jsdelivr serves as
-  #   https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v<version>/ofp-view.js
-  # — the URL `ofp-export view --thin` of that version writes. It runs before
-  # either publish job, so no published version points at a file that is not
-  # there. The tag does not match `v*`, so pushing it starts nothing here.
-  cdn:
+  # A released version's viewer for thin pages (design.md D68, D69): published
+  # to npm as @ofplang/export-viewer, which jsDelivr serves as
+  #   https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@<version>/ofp-view.js
+  # — the URL `ofp-export view --thin` of that version writes. npm, not a
+  # branch of this repository: a claude.ai artifact may load scripts from
+  # jsDelivr's /npm/ only. Trusted publishing (OIDC, no token) — the publisher
+  # registered on npmjs.com is ofplang/export, publish.yml, environment npm. It
+  # runs before either Python publish job, so no published version points at a
+  # file that is not there. A release candidate `v0.1.5rc2` is `0.1.5-rc.2`
+  # under the dist-tag `rc`, leaving `latest` on the last release.
+  npm:
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          fetch-depth: 0
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@latest
       - uses: actions/download-artifact@v4
         with:
           name: viewer-cdn
-          path: ${{ runner.temp }}/cdn
-      - name: Commit to the cdn branch and tag it
+          path: ${{ runner.temp }}/viewer
+      - name: Publish @ofplang/export-viewer
+        id: publish
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin cdn >/dev/null; then
-            git fetch origin cdn
-            git switch cdn
-          else
-            # The first release: a branch with no history of main in it.
-            git switch --orphan cdn
-          fi
-          cp "$RUNNER_TEMP/cdn/ofp-view.js" ofp-view.js
-          cat > README.md <<'EOF'
-          # cdn
-
-          Built viewers for thin pages, one commit per release of ofplang/export. Nothing
-          here is edited by hand: the release workflow (`.github/workflows/publish.yml`
-          on main) builds `ofp-view.js` from the tagged commit, commits it here and tags
-          the commit `cdn-v<version>`, which jsdelivr serves as
-
-              https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v<version>/ofp-view.js
-          EOF
-          git add ofp-view.js README.md
-          git commit -m "ofp-view.js for v$version" -m "Built from $GITHUB_SHA by the release workflow."
-          git tag -a "cdn-v$version" -m "ofp-view.js for v$version, built from $GITHUB_SHA"
-          git push origin cdn "cdn-v$version"
-      - name: jsdelivr serves it
+          npm_version="$(printf '%s' "$version" | sed -E 's/rc([0-9]+)$/-rc.\1/')"
+          tag=latest
+          case "$npm_version" in *-rc.*) tag=rc ;; esac
+          pkg="$RUNNER_TEMP/pkg"
+          mkdir -p "$pkg"
+          cp web/npm/package.json web/npm/README.md LICENSE "$RUNNER_TEMP/viewer/ofp-view.js" "$pkg/"
+          cd "$pkg"
+          npm version --no-git-tag-version "$npm_version"
+          npm publish --provenance --access public --tag "$tag"
+          echo "url=https://cdn.jsdelivr.net/npm/@ofplang/export-viewer@$npm_version/ofp-view.js" >> "$GITHUB_OUTPUT"
+      - name: jsDelivr serves it
         shell: bash
         run: |
-          url="https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v${GITHUB_REF_NAME#v}/ofp-view.js"
+          url="${{ steps.publish.outputs.url }}"
           for i in $(seq 1 20); do
             code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"
             echo "$code $url"
             if [ "$code" = 200 ]; then exit 0; fi
             sleep 15
           done
-          echo "::error::jsdelivr does not serve $url"
+          echo "::error::jsDelivr does not serve $url"
           exit 1
 
   publish-testpypi:
-    needs: [build, cdn]
-    # A manual run has no tag, so no cdn job; a tag push publishes only once its viewer is served.
+    needs: [build, npm]
+    # A manual run has no tag, so no npm job; a tag push publishes only once its viewer is served.
     if: >-
       always() && needs.build.result == 'success'
-      && (needs.cdn.result == 'success' || github.event_name == 'workflow_dispatch')
+      && (needs.npm.result == 'success' || github.event_name == 'workflow_dispatch')
       && (github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
       || (github.event_name == 'push' && contains(github.ref_name, 'rc')))
     runs-on: ubuntu-latest
@@ -157,10 +154,10 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish-pypi:
-    needs: [build, cdn]
+    needs: [build, npm]
     if: >-
       always() && needs.build.result == 'success'
-      && (needs.cdn.result == 'success' || github.event_name == 'workflow_dispatch')
+      && (needs.npm.result == 'success' || github.event_name == 'workflow_dispatch')
       && (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
       || (github.event_name == 'push' && !contains(github.ref_name, 'rc')))
     runs-on: ubuntu-latest

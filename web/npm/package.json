@@ -1,0 +1,18 @@
+{
+  "name": "@ofplang/export-viewer",
+  "version": "0.0.0",
+  "description": "ofp-view.js: the OFP View viewer as one ES module, for a thin page of ofplang documents that loads it from jsDelivr.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ofplang/export.git"
+  },
+  "homepage": "https://github.com/ofplang/export",
+  "type": "module",
+  "main": "ofp-view.js",
+  "files": ["ofp-view.js", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
