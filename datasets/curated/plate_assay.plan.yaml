@@ -1,0 +1,537 @@
+time:
+  unit: minute
+interface:
+  inputs:
+    sample_1: rack.tube_1
+    sample_2: rack.tube_2
+    sample_3: rack.tube_3
+    standards: rack.plate
+  outputs:
+    assay: exit.stack
+outcome: optimal
+objective:
+  kind: makespan
+  value: 118
+activities:
+- kind: processing
+  start: 0
+  end: 2
+  process: new_plate
+  mode: '0'
+  node:
+  - NewPlate
+  devices:
+  - labeller
+  output_spots:
+    plate: labeller.out
+- kind: transport
+  start: 0
+  end: 2
+  from_spot: rack.plate
+  to_spot: handler.plate_b
+  transporter: plate_arm
+  arc:
+    from:
+      node: []
+      port: standards
+    to:
+      node:
+      - AddStandards
+      port: standards
+- kind: transport
+  start: 2
+  end: 4
+  from_spot: labeller.out
+  to_spot: handler.plate_a
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - NewPlate
+      port: plate
+    to:
+      node:
+      - AddStandards
+      port: plate
+- kind: processing
+  start: 4
+  end: 12
+  process: add_standards
+  mode: '0'
+  node:
+  - AddStandards
+  devices:
+  - handler
+  input_spots:
+    plate: handler.plate_a
+    standards: handler.plate_b
+  output_spots:
+    plate: handler.plate_a
+    standards: handler.plate_b
+- kind: transport
+  start: 12
+  end: 13
+  from_spot: rack.tube_1
+  to_spot: handler.tube
+  transporter: tube_arm
+  arc:
+    from:
+      node: []
+      port: sample_1
+    to:
+      node:
+      - AddSample1
+      - Transfer
+      port: tube
+- kind: transport
+  start: 13
+  end: 13
+  from_spot: handler.plate_a
+  to_spot: handler.plate_a
+  arc:
+    from:
+      node:
+      - AddStandards
+      port: plate
+    to:
+      node:
+      - AddSample1
+      - Transfer
+      port: plate
+- kind: processing
+  start: 13
+  end: 17
+  process: transfer
+  mode: '0'
+  node:
+  - AddSample1
+  - Transfer
+  devices:
+  - handler
+  input_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+  output_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+- kind: transport
+  start: 17
+  end: 17
+  from_spot: handler.plate_a
+  to_spot: handler.plate_a
+  arc:
+    from:
+      node:
+      - AddSample1
+      - Transfer
+      port: plate
+    to:
+      node:
+      - AddSample2
+      - Transfer
+      port: plate
+- kind: transport
+  start: 17
+  end: 18
+  from_spot: handler.tube
+  to_spot: waste.tube_bin
+  transporter: tube_arm
+  arc:
+    from:
+      node:
+      - AddSample1
+      - Transfer
+      port: tube
+    to:
+      node:
+      - AddSample1
+      - DiscardTube
+      port: tube
+- kind: processing
+  start: 18
+  end: 19
+  process: discard_tube
+  mode: '0'
+  node:
+  - AddSample1
+  - DiscardTube
+  devices:
+  - waste
+  input_spots:
+    tube: waste.tube_bin
+- kind: transport
+  start: 18
+  end: 19
+  from_spot: rack.tube_2
+  to_spot: handler.tube
+  transporter: tube_arm
+  arc:
+    from:
+      node: []
+      port: sample_2
+    to:
+      node:
+      - AddSample2
+      - Transfer
+      port: tube
+- kind: processing
+  start: 19
+  end: 23
+  process: transfer
+  mode: '0'
+  node:
+  - AddSample2
+  - Transfer
+  devices:
+  - handler
+  input_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+  output_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+- kind: transport
+  start: 23
+  end: 23
+  from_spot: handler.plate_a
+  to_spot: handler.plate_a
+  arc:
+    from:
+      node:
+      - AddSample2
+      - Transfer
+      port: plate
+    to:
+      node:
+      - AddSample3
+      - Transfer
+      port: plate
+- kind: transport
+  start: 23
+  end: 24
+  from_spot: handler.tube
+  to_spot: waste.tube_bin
+  transporter: tube_arm
+  arc:
+    from:
+      node:
+      - AddSample2
+      - Transfer
+      port: tube
+    to:
+      node:
+      - AddSample2
+      - DiscardTube
+      port: tube
+- kind: processing
+  start: 24
+  end: 25
+  process: discard_tube
+  mode: '0'
+  node:
+  - AddSample2
+  - DiscardTube
+  devices:
+  - waste
+  input_spots:
+    tube: waste.tube_bin
+- kind: transport
+  start: 24
+  end: 25
+  from_spot: rack.tube_3
+  to_spot: handler.tube
+  transporter: tube_arm
+  arc:
+    from:
+      node: []
+      port: sample_3
+    to:
+      node:
+      - AddSample3
+      - Transfer
+      port: tube
+- kind: processing
+  start: 25
+  end: 29
+  process: transfer
+  mode: '0'
+  node:
+  - AddSample3
+  - Transfer
+  devices:
+  - handler
+  input_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+  output_spots:
+    plate: handler.plate_a
+    tube: handler.tube
+- kind: transport
+  start: 29
+  end: 31
+  from_spot: handler.plate_a
+  to_spot: sealer.stage
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - AddSample3
+      - Transfer
+      port: plate
+    to:
+      node:
+      - Develop
+      - Seal
+      port: plate
+- kind: transport
+  start: 31
+  end: 32
+  from_spot: handler.tube
+  to_spot: waste.tube_bin
+  transporter: tube_arm
+  arc:
+    from:
+      node:
+      - AddSample3
+      - Transfer
+      port: tube
+    to:
+      node:
+      - AddSample3
+      - DiscardTube
+      port: tube
+- kind: processing
+  start: 31
+  end: 33
+  process: seal
+  mode: '0'
+  node:
+  - Develop
+  - Seal
+  devices:
+  - sealer
+  input_spots:
+    plate: sealer.stage
+  output_spots:
+    plate: sealer.stage
+- kind: processing
+  start: 32
+  end: 33
+  process: discard_tube
+  mode: '0'
+  node:
+  - AddSample3
+  - DiscardTube
+  devices:
+  - waste
+  input_spots:
+    tube: waste.tube_bin
+- kind: transport
+  start: 33
+  end: 35
+  from_spot: sealer.stage
+  to_spot: incubator.slot
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - Seal
+      port: plate
+    to:
+      node:
+      - Develop
+      - Incubate
+      port: plate
+- kind: transport
+  start: 35
+  end: 37
+  from_spot: handler.plate_b
+  to_spot: waste.plate_bin
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - AddStandards
+      port: standards
+    to:
+      node:
+      - DiscardStandards
+      port: plate
+- kind: processing
+  start: 35
+  end: 65
+  process: incubate
+  mode: '0'
+  node:
+  - Develop
+  - Incubate
+  devices:
+  - incubator
+  device_access: false
+  input_spots:
+    plate: incubator.slot
+  output_spots:
+    plate: incubator.slot
+- kind: processing
+  start: 37
+  end: 38
+  process: discard_plate
+  mode: '0'
+  node:
+  - DiscardStandards
+  devices:
+  - waste
+  input_spots:
+    plate: waste.plate_bin
+- kind: transport
+  start: 65
+  end: 67
+  from_spot: incubator.slot
+  to_spot: washer.stage
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - Incubate
+      port: plate
+    to:
+      node:
+      - Develop
+      - Wash
+      port: plate
+- kind: processing
+  start: 67
+  end: 73
+  process: wash
+  mode: '0'
+  node:
+  - Develop
+  - Wash
+  devices:
+  - washer
+  input_spots:
+    plate: washer.stage
+  output_spots:
+    plate: washer.stage
+- kind: transport
+  start: 73
+  end: 75
+  from_spot: washer.stage
+  to_spot: handler.plate_a
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - Wash
+      port: plate
+    to:
+      node:
+      - Develop
+      - AddDetection
+      port: plate
+- kind: processing
+  start: 75
+  end: 79
+  process: add_detection
+  mode: '0'
+  node:
+  - Develop
+  - AddDetection
+  devices:
+  - handler
+  input_spots:
+    plate: handler.plate_a
+  output_spots:
+    plate: handler.plate_a
+- kind: transport
+  start: 79
+  end: 81
+  from_spot: handler.plate_a
+  to_spot: incubator.slot
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - AddDetection
+      port: plate
+    to:
+      node:
+      - Develop
+      - IncubateAgain
+      port: plate
+- kind: processing
+  start: 81
+  end: 111
+  process: incubate
+  mode: '0'
+  node:
+  - Develop
+  - IncubateAgain
+  devices:
+  - incubator
+  device_access: false
+  input_spots:
+    plate: incubator.slot
+  output_spots:
+    plate: incubator.slot
+- kind: transport
+  start: 111
+  end: 113
+  from_spot: incubator.slot
+  to_spot: reader.stage
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - IncubateAgain
+      port: plate
+    to:
+      node:
+      - Develop
+      - Read
+      port: plate
+- kind: processing
+  start: 113
+  end: 116
+  process: read
+  mode: '0'
+  node:
+  - Develop
+  - Read
+  devices:
+  - reader
+  input_spots:
+    plate: reader.stage
+  output_spots:
+    plate: reader.stage
+- kind: processing
+  start: 116
+  end: 116
+  process: analyze
+  mode: curve_fit
+  node:
+  - Analyze
+- kind: transport
+  start: 116
+  end: 118
+  from_spot: reader.stage
+  to_spot: exit.stack
+  transporter: plate_arm
+  arc:
+    from:
+      node:
+      - Develop
+      - Read
+      port: plate
+    to:
+      node: []
+      port: assay
+meta:
+  workflow: plate_assay.workflow.yaml
+  environment: plate_assay.env.yaml
+  status: plate_assay.document.yaml

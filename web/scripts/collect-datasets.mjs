@@ -35,6 +35,8 @@ const BLURBS = {
   reroute_stay: "A re-route where the plate stays put, so the relay folds out of the plan.",
   storage: "A plate resting in storage: its spot is held, the device stays free for other work.",
   data_flow: "Pure Data beside a plate: a reading scored on no device, returned as the workflow's output.",
+  plate_assay:
+    "A plate assay: three sample tubes and a plate of standards onto a fresh plate, which is developed, read and returned; the tubes and the standards are discarded.",
 };
 
 /** A joint plan (§6.11) is refused by the viewer (design.md D42), so it is not

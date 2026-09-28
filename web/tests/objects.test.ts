@@ -153,8 +153,8 @@ const traced = (scene: Scene): readonly ObjectTrace[] => {
   return t.traces;
 };
 
-it("the corpus is the eleven bundled plans", () => {
-  expect(plans.length).toBeGreaterThanOrEqual(11);
+it("the corpus is the twelve bundled plans", () => {
+  expect(plans.length).toBeGreaterThanOrEqual(12);
 });
 
 describe("every bundled plan traces", () => {
@@ -214,6 +214,22 @@ describe("the shapes the design expects (design.md §23)", () => {
       { label: "Plate · PrepC.plate", fate: "consume", moves: 2 },
     ]);
     for (const x of t) expect(x.segments.map((s) => s.kind)).toContain("resting");
+  });
+
+  it("plate_assay: five Objects of two types, each with its own fate", () => {
+    const t = byName.get("plate_assay.plan.yaml")!;
+    const fate = (x: ObjectTrace) =>
+      `${x.origin.kind} -> ${x.fate.kind}${"node" in x.fate ? ` at ${x.fate.node.join(".")}` : ""}`;
+    expect(Object.fromEntries(t.map((x) => [x.label, fate(x)]))).toEqual({
+      "Plate · NewPlate.plate": "create -> output",
+      "Plate · inputs.standards": "input -> consume at DiscardStandards",
+      "SampleTube · inputs.sample_1": "input -> consume at AddSample1.DiscardTube",
+      "SampleTube · inputs.sample_2": "input -> consume at AddSample2.DiscardTube",
+      "SampleTube · inputs.sample_3": "input -> consume at AddSample3.DiscardTube",
+    });
+    // The plate rests in the incubator while the machine stays free (§4.4.2).
+    const plate = t.find((x) => x.origin.kind === "create")!;
+    expect(plate.segments.filter((s) => s.kind === "resting")).toHaveLength(2);
   });
 
   it("reformatter: every step creates and consumes, so every Object is one move", () => {

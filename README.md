@@ -24,7 +24,7 @@ it**, to open from disk or send to someone. It is also `ofp export view`
 `lc export view` (`labcode[export]`, from labcode 0.9).
 
 **→ [ofplang.github.io/export](https://ofplang.github.io/export/)**
-— eleven plans are bundled (one of them, `data_flow`, curated here: Pure Data, and an entry with inputs and outputs); `?doc=plate_batch` opens one directly. Drop your own
+— twelve plans are bundled (two of them curated here: `data_flow`, Pure Data and an entry with inputs and outputs, and `plate_assay`, an assay whose five Objects each meet a different fate); `?doc=plate_assay` opens one directly. Drop your own
 YAML on the window to read that instead: a plan, a workflow, an environment, or
 all three at once. A workflow on its own is fine — the graph does not need a
 plan to be read. Either pane can take the whole window: *Both / Workflow / Plan*

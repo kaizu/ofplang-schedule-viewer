@@ -1,0 +1,243 @@
+# A plate assay, ELISA-like: three samples and a plate of standards go onto a
+# fresh assay plate, which is developed and read; the reading is analysed into
+# concentrations.
+#
+# Written for the viewer, to show in one plan what the smaller examples show
+# one at a time. Five Objects of two types, each with its own fate:
+#
+#   sample_1..3  SampleTube  entry inputs, emptied into the plate, then discarded
+#   standards    Plate       entry input, read from, then discarded
+#   assay        Plate       created here, carried through every step, returned
+#
+# and Pure Data beside them: a reading, and the concentrations analysed from it,
+# returned as the workflow's second output. Literals fix what the steps take
+# as parameters. Durations and devices are in plate_assay.env.yaml.
+spec_version: "0.0"
+
+types:
+  Plate: { domain: object }
+  SampleTube: { domain: object }
+  Reading: { domain: data }
+  Concentrations: { domain: data }
+
+processes:
+
+  # --- atomic steps ---
+
+  new_plate:                                    # the labeller issues a fresh plate
+    kind: atomic
+    outputs:
+      plate: { type: Plate, phase: data }
+    objects:
+      create: [outputs.plate]
+
+  add_standards:                                # standards pipetted onto the assay plate
+    kind: atomic
+    inputs:
+      plate:     { type: Plate, phase: data }
+      standards: { type: Plate, phase: data }
+      volume_ul: { type: Float, phase: graph }
+    outputs:
+      plate:     { type: Plate, phase: data }
+      standards: { type: Plate, phase: data }
+    objects:
+      map:
+        outputs.plate: inputs.plate
+        outputs.standards: inputs.standards
+
+  discard_plate:
+    kind: atomic
+    inputs:
+      plate: { type: Plate, phase: data }
+    objects:
+      consume: [inputs.plate]
+
+  transfer:                                     # one sample pipetted onto the plate
+    kind: atomic
+    inputs:
+      plate:     { type: Plate, phase: data }
+      tube:      { type: SampleTube, phase: data }
+      volume_ul: { type: Float, phase: graph }
+    outputs:
+      plate: { type: Plate, phase: data }
+      tube:  { type: SampleTube, phase: data }
+    objects:
+      map:
+        outputs.plate: inputs.plate
+        outputs.tube: inputs.tube
+
+  discard_tube:
+    kind: atomic
+    inputs:
+      tube: { type: SampleTube, phase: data }
+    objects:
+      consume: [inputs.tube]
+
+  seal:
+    kind: atomic
+    behavior: [object_identity_map]
+    inputs:
+      plate: { type: Plate, phase: data }
+    outputs:
+      plate: { type: Plate, phase: data }
+
+  incubate:                                     # rests in the incubator; the machine is free
+    kind: atomic
+    behavior: [object_identity_map]
+    inputs:
+      plate: { type: Plate, phase: data }
+    outputs:
+      plate: { type: Plate, phase: data }
+
+  wash:                                         # the washer peels, washes and dries
+    kind: atomic
+    behavior: [object_identity_map]
+    inputs:
+      plate: { type: Plate, phase: data }
+    outputs:
+      plate: { type: Plate, phase: data }
+
+  add_detection:
+    kind: atomic
+    inputs:
+      plate:     { type: Plate, phase: data }
+      volume_ul: { type: Float, phase: graph }
+    outputs:
+      plate: { type: Plate, phase: data }
+    objects:
+      map:
+        outputs.plate: inputs.plate
+
+  read:                                         # absorbance, as Pure Data
+    kind: atomic
+    inputs:
+      plate: { type: Plate, phase: data }
+    outputs:
+      plate:   { type: Plate, phase: data }
+      reading: { type: Reading, phase: data }
+    objects:
+      map:
+        outputs.plate: inputs.plate
+
+  analyze:                                      # a standard curve, on no device
+    kind: atomic
+    inputs:
+      reading:      { type: Reading, phase: data }
+      top_standard: { type: Float, phase: graph }
+      dilutions:    { type: Int, phase: graph }
+    outputs:
+      concentrations: { type: Concentrations, phase: data }
+
+  # --- composites ---
+
+  add_sample:                                   # one sample onto the plate, its tube to waste
+    kind: composite
+    inputs:
+      plate: { type: Plate, phase: data }
+      tube:  { type: SampleTube, phase: data }
+    outputs:
+      plate: { type: Plate, phase: data }
+    body:
+      nodes:
+        - id: Transfer
+          process: transfer
+          state:
+            plate: { from: inputs.plate }
+            tube:  { from: inputs.tube }
+          bind:
+            volume_ul: { value: 50 }
+        - id: DiscardTube
+          process: discard_tube
+          state:
+            tube: { from: Transfer.tube }
+      returns:
+        plate: { from: Transfer.plate }
+
+  develop:                                      # seal, incubate, wash, detect, incubate, read
+    kind: composite
+    inputs:
+      plate: { type: Plate, phase: data }
+    outputs:
+      plate:   { type: Plate, phase: data }
+      reading: { type: Reading, phase: data }
+    body:
+      nodes:
+        - id: Seal
+          process: seal
+          state: { plate: { from: inputs.plate } }
+        - id: Incubate
+          process: incubate
+          state: { plate: { from: Seal.plate } }
+        - id: Wash
+          process: wash
+          state: { plate: { from: Incubate.plate } }
+        - id: AddDetection
+          process: add_detection
+          state: { plate: { from: Wash.plate } }
+          bind:
+            volume_ul: { value: 100 }
+        - id: IncubateAgain
+          process: incubate
+          state: { plate: { from: AddDetection.plate } }
+        - id: Read
+          process: read
+          state: { plate: { from: IncubateAgain.plate } }
+      returns:
+        plate:   { from: Read.plate }
+        reading: { from: Read.reading }
+
+  main:
+    kind: composite
+    inputs:
+      sample_1:  { type: SampleTube, phase: data }
+      sample_2:  { type: SampleTube, phase: data }
+      sample_3:  { type: SampleTube, phase: data }
+      standards: { type: Plate, phase: data }
+    outputs:
+      assay:          { type: Plate, phase: data }
+      concentrations: { type: Concentrations, phase: data }
+    body:
+      nodes:
+        - id: NewPlate
+          process: new_plate
+        - id: AddStandards
+          process: add_standards
+          state:
+            plate:     { from: NewPlate.plate }
+            standards: { from: inputs.standards }
+          bind:
+            volume_ul: { value: 50 }
+        - id: DiscardStandards
+          process: discard_plate
+          state:
+            plate: { from: AddStandards.standards }
+        - id: AddSample1
+          process: add_sample
+          state:
+            plate: { from: AddStandards.plate }
+            tube:  { from: inputs.sample_1 }
+        - id: AddSample2
+          process: add_sample
+          state:
+            plate: { from: AddSample1.plate }
+            tube:  { from: inputs.sample_2 }
+        - id: AddSample3
+          process: add_sample
+          state:
+            plate: { from: AddSample2.plate }
+            tube:  { from: inputs.sample_3 }
+        - id: Develop
+          process: develop
+          state:
+            plate: { from: AddSample3.plate }
+        - id: Analyze
+          process: analyze
+          bind:
+            reading:      { from: Develop.reading }
+            top_standard: { value: 8.0 }
+            dilutions:    { value: 5 }
+      returns:
+        assay:          { from: Develop.plate }
+        concentrations: { from: Analyze.concentrations }
+
+entry: main

@@ -1,0 +1,11 @@
+# Where plate_assay's entry material starts, and where the finished plate goes
+# (SPECIFICATIONS.md §6.8). The concentrations are Pure Data and need no spot.
+interface:
+  inputs:
+    sample_1: rack.tube_1
+    sample_2: rack.tube_2
+    sample_3: rack.tube_3
+    standards: rack.plate
+  outputs:
+    assay: exit.stack
+activities: []
