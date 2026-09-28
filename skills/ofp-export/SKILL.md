@@ -31,6 +31,11 @@ Also reachable as `ofp export view …` (and `lc export view …` under labcode)
   what happens to one thing, not what a machine is doing. It needs the plan's
   workflow — that is what tells one plate from another — and the page opens on
   the device view where the Objects cannot be told apart.
+- `--thin` writes a page of a few KB — the documents and one script tag that
+  loads the viewer from a CDN — instead of the ~190 KB single file. Use it when
+  you have to write the page out yourself, as an artifact: copy the file's text
+  into the artifact unchanged. It needs the network to open; a file to send
+  someone is better without `--thin`.
 
 ## Exit codes
 

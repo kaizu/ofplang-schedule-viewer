@@ -13,6 +13,7 @@ arrives unchanged.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from importlib import resources
@@ -59,6 +60,43 @@ def encode(payload: dict[str, Any] | None) -> str:
     if payload is None:
         return "null"
     return json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
+
+
+#: Where a released version's viewer is served for a thin page (design.md D68):
+#: jsdelivr, from the `cdn` branch the release workflow tags `cdn-v<version>`.
+CDN = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v{version}/ofp-view.js"
+
+_RELEASED = re.compile(r"\d+\.\d+\.\d+(rc\d+)?")
+
+
+def viewer_url(version: str) -> str | None:
+    """This version's viewer on the CDN, or None for a build that was never tagged."""
+    return CDN.format(version=version) if _RELEASED.fullmatch(version) else None
+
+
+def thin(payload: dict[str, Any], viewer: str) -> str:
+    """
+    A thin page: the documents, and one script that brings the viewer.
+
+    Small enough for Claude to write out as an artifact, where the single file
+    (the template, some 190 KB of script) is not. The documents element is the
+    same contract as the template's, so the page reads them the same way.
+    """
+    title = html.escape(str(payload.get("name") or "documents"))
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"<title>{title} — OFP View</title>\n"
+        f'<script type="application/json" id="ofp-documents" data-contract="{CONTRACT}">'
+        f"{encode(payload)}</script>\n"
+        f'<script type="module" src="{html.escape(viewer, quote=True)}"></script>\n'
+        "</head>\n"
+        "<body></body>\n"
+        "</html>\n"
+    )
 
 
 def embed(template: str, payload: dict[str, Any] | None) -> str:

@@ -43,6 +43,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci && npm run build:single
         working-directory: web
+      # The same build as a module, for thin pages (design.md D68); the `cdn` job publishes it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer-cdn
+          path: web/dist-cdn/ofp-view.js
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -69,11 +74,75 @@ jobs:
           name: dist
           path: dist/
 
-  publish-testpypi:
+  # A released version's viewer for thin pages (design.md D68): committed to the
+  # `cdn` branch and tagged `cdn-v<version>`, which jsdelivr serves as
+  #   https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v<version>/ofp-view.js
+  # — the URL `ofp-export view --thin` of that version writes. It runs before
+  # either publish job, so no published version points at a file that is not
+  # there. The tag does not match `v*`, so pushing it starts nothing here.
+  cdn:
     needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: viewer-cdn
+          path: ${{ runner.temp }}/cdn
+      - name: Commit to the cdn branch and tag it
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin cdn >/dev/null; then
+            git fetch origin cdn
+            git switch cdn
+          else
+            # The first release: a branch with no history of main in it.
+            git switch --orphan cdn
+          fi
+          cp "$RUNNER_TEMP/cdn/ofp-view.js" ofp-view.js
+          cat > README.md <<'EOF'
+          # cdn
+
+          Built viewers for thin pages, one commit per release of ofplang/export. Nothing
+          here is edited by hand: the release workflow (`.github/workflows/publish.yml`
+          on main) builds `ofp-view.js` from the tagged commit, commits it here and tags
+          the commit `cdn-v<version>`, which jsdelivr serves as
+
+              https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v<version>/ofp-view.js
+          EOF
+          git add ofp-view.js README.md
+          git commit -m "ofp-view.js for v$version" -m "Built from $GITHUB_SHA by the release workflow."
+          git tag -a "cdn-v$version" -m "ofp-view.js for v$version, built from $GITHUB_SHA"
+          git push origin cdn "cdn-v$version"
+      - name: jsdelivr serves it
+        shell: bash
+        run: |
+          url="https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v${GITHUB_REF_NAME#v}/ofp-view.js"
+          for i in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"
+            echo "$code $url"
+            if [ "$code" = 200 ]; then exit 0; fi
+            sleep 15
+          done
+          echo "::error::jsdelivr does not serve $url"
+          exit 1
+
+  publish-testpypi:
+    needs: [build, cdn]
+    # A manual run has no tag, so no cdn job; a tag push publishes only once its viewer is served.
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-      || (github.event_name == 'push' && contains(github.ref_name, 'rc'))
+      always() && needs.build.result == 'success'
+      && (needs.cdn.result == 'success' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+      || (github.event_name == 'push' && contains(github.ref_name, 'rc')))
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -88,10 +157,12 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish-pypi:
-    needs: build
+    needs: [build, cdn]
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
-      || (github.event_name == 'push' && !contains(github.ref_name, 'rc'))
+      always() && needs.build.result == 'success'
+      && (needs.cdn.result == 'success' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
+      || (github.event_name == 'push' && !contains(github.ref_name, 'rc')))
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

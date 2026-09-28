@@ -170,6 +170,69 @@ def test_help_is_ascii_so_any_console_can_print_it(argv, capsys):
     assert text.isascii(), sorted({c for c in text if not c.isascii()})
 
 
+# ── a thin page (design.md D68) ────────────────────────────────────────────
+
+
+def test_a_thin_page_is_the_documents_and_one_script_from_the_cdn(tmp_path, capsys, monkeypatch):
+    # Pretend to be a released version: that is what has a viewer on the CDN.
+    monkeypatch.setattr("ofplang.export.cli.__version__", "0.1.5")
+    out = tmp_path / "thin.html"
+    code, stdout, err = run(
+        capsys, str(OUTPUTS / "storage.plan.yaml"), "--thin", "--gantt", "object", "-o", str(out), "--json"
+    )
+    assert code == EXIT_OK, err
+    html = out.read_text(encoding="utf-8")
+    url = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5/ofp-view.js"
+    assert f'<script type="module" src="{url}"></script>' in html
+    assert json.loads(stdout)["viewer"] == url
+    assert "template_build" not in json.loads(stdout)
+    # The same contract as the template's, so the page reads it the same way.
+    p = payload_of(html)
+    assert p["name"] == "storage.plan.yaml"
+    assert set(p) == {"name", "plan", "workflow", "environment", "ui"}
+    assert p["ui"] == {"view": "object"}
+    # Small: the documents, and nothing of the viewer.
+    assert len(html) < len(p["plan"]) + len(p["workflow"]) + len(p["environment"]) + 1000
+
+
+def test_a_thin_page_can_load_the_viewer_from_elsewhere(tmp_path, capsys):
+    out = tmp_path / "thin.html"
+    url = "http://localhost:4173/ofp-view.js?x=<1>"
+    code, _, err = run(
+        capsys, str(OUTPUTS / "simple.plan.yaml"), "--thin", "--viewer-url", url, "-o", str(out)
+    )
+    assert code == EXIT_OK, err
+    assert 'src="http://localhost:4173/ofp-view.js?x=&lt;1&gt;"' in out.read_text(encoding="utf-8")
+
+
+def test_a_development_build_has_no_viewer_on_the_cdn(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("ofplang.export.cli.__version__", "0.1.5.dev3+g1234567")
+    code, _, err = run(capsys, str(OUTPUTS / "simple.plan.yaml"), "--thin", "-o", str(tmp_path / "x.html"))
+    assert code == EXIT_INPUT
+    assert "not a released version" in err and "--viewer-url" in err
+    assert not (tmp_path / "x.html").exists()
+
+
+def test_the_viewer_url_is_for_a_thin_page_only(tmp_path, capsys):
+    code, _, err = run(
+        capsys,
+        str(OUTPUTS / "simple.plan.yaml"),
+        "--viewer-url",
+        "http://x/v.js",
+        "-o",
+        str(tmp_path / "x.html"),
+    )
+    assert code == EXIT_INPUT
+    assert "--viewer-url is for --thin" in err
+
+
+def test_a_release_candidate_has_its_own_viewer_on_the_cdn():
+    from ofplang.export.template import viewer_url
+
+    assert viewer_url("0.1.5rc1") == "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5rc1/ofp-view.js"
+    assert viewer_url("0.1.5.post1") is None
+
+
 # ── the text arrives unchanged ─────────────────────────────────────────────
 
 

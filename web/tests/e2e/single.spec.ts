@@ -228,3 +228,43 @@ test("a workflow with a literal opens, and shows the value with its port", async
   await page.locator('#graph [data-key="Heat"] rect.box').click();
   await expect(page.locator("#inspector")).toContainText("minutes = 2.5");
 });
+
+test("a thin page brings the viewer from the CDN and draws the same (D68)", async ({ page }, info) => {
+  // Written by the Python command, as `lc export view --thin` would, and opened
+  // from disk. The CDN is answered from this build's dist-cdn/ofp-view.js, so
+  // the test needs no network and checks the file the release publishes.
+  const cdnFile = fileURLToPath(new URL("../../dist-cdn/ofp-view.js", import.meta.url));
+  const url = "https://cdn.jsdelivr.net/gh/ofplang/export@cdn-vTEST/ofp-view.js";
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  const out = info.outputPath("thin.html");
+  const [python, ...lead] = findPython();
+  const run = spawnSync(
+    python!,
+    [...lead, "-m", "ofplang.export", "view", "datasets/curated/plate_assay.plan.yaml",
+      "--thin", "--viewer-url", url, "--gantt", "object", "-o", out],
+    { cwd: repo, encoding: "utf8" },
+  );
+  expect(run.status, `${python} said: ${run.stderr || run.error}`).toBe(0);
+  // A few KB of documents, not the viewer.
+  expect(readFileSync(out, "utf8").length).toBeLessThan(30_000);
+
+  const fetched: string[] = [];
+  await page.route(url, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/javascript",
+      headers: { "access-control-allow-origin": "*" },
+      body: readFileSync(cdnFile, "utf8"),
+    }),
+  );
+  page.on("request", (r) => fetched.push(r.url()));
+  await page.goto(pathToFileURL(out).href);
+
+  await expect(page.locator("#plot rect.bar").first()).toBeVisible();
+  await expect(page.locator('#views button[data-view="object"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#gutter [data-o]")).toHaveCount(5);
+  await expect(page.locator("#graph g.gnode").first()).toBeVisible();
+  await expect(page.locator('meta[name="ofp-viewer-build"]')).toHaveCount(1);
+  // The viewer, and the fonts it asks for; nothing else.
+  expect(fetched.filter((u) => !u.startsWith("file:") && u !== url && !/fonts\.(googleapis|gstatic)\.com/.test(u))).toEqual([]);
+});

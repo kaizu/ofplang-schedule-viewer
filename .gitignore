@@ -5,6 +5,8 @@
 node_modules/
 dist/
 dist-single/
+# ofp-view.js for a thin page; the release workflow puts it on the `cdn` branch (design.md D68).
+dist-cdn/
 *.tsbuildinfo
 
 # Datasets are generated from external/ at build time (design.md D9 ①).

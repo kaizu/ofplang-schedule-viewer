@@ -53,7 +53,7 @@ a plan names none; where they cannot be followed, that view is not offered.
 
 ```sh
 ofp-export view <file>... [-o OUT] [--layout split|workflow|plan] [--gantt device|flow|activity|object]
-                          [--name NAME] [--no-follow] [--json]
+                          [--name NAME] [--no-follow] [--thin [--viewer-url URL]] [--json]
 ```
 
 - Files are a plan, a workflow and/or an environment, in any order; which is
@@ -87,6 +87,24 @@ the page reads them with the same reader it uses for a dropped file. An empty
 template (`null` in that element) is an offline viewer to drop files on. The
 web fonts stay a link, so offline the page falls back to system fonts; *Copy
 link* is hidden, since a link made from a file on disk would point at the disk.
+
+### A thin page
+
+`ofp-export view --thin` writes the same element and, instead of the viewer,
+one script tag that loads it from a CDN:
+
+```html
+<script type="application/json" id="ofp-documents" data-contract="1">…</script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/ofplang/export@cdn-v0.1.5/ofp-view.js"></script>
+```
+
+That is a few kilobytes of documents rather than some 190 KB, for a page
+something else has to carry — a claude.ai artifact, which Claude writes out
+token by token. It needs the network to open. The script is the version of
+the command that wrote the page; each release builds it (`npm run build:single`
+writes `web/dist-cdn/ofp-view.js` beside the template), commits it to the
+`cdn` branch and tags it `cdn-v<version>`, and [jsdelivr](https://www.jsdelivr.com/)
+serves it from there. A development build has none, so it takes `--viewer-url`.
 
 ## Layout
 

@@ -29,7 +29,7 @@ from typing import Any
 
 from . import __version__
 from .documents import Finding, InputError, collect, refusals, warnings
-from .template import TemplateError, embed, load_template, template_build
+from .template import TemplateError, embed, load_template, template_build, thin, viewer_url
 
 EXIT_OK = 0
 EXIT_INPUT = 2
@@ -82,6 +82,20 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not read the workflow and environment a plan's `meta` names",
     )
+    v.add_argument(
+        "--thin",
+        action="store_true",
+        help=(
+            "write a thin page instead: the documents and one script tag that loads this version's "
+            "viewer from the jsdelivr CDN. A few KB rather than some 190 KB, for a page something "
+            "else has to carry, such as a claude.ai artifact; it needs the network to open"
+        ),
+    )
+    v.add_argument(
+        "--viewer-url",
+        metavar="URL",
+        help="with --thin: load the viewer from here (default: this version's, on the CDN)",
+    )
     v.add_argument("--json", action="store_true", help="with -o: print a JSON summary instead of the path")
     v.add_argument("--template", type=Path, metavar="FILE", help=argparse.SUPPRESS)  # development only
     return parser
@@ -97,10 +111,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _view(args: argparse.Namespace) -> int:
     if args.json and args.out is None:
         return _fail("--json needs -o: the HTML and the summary would share standard output")
+    if args.viewer_url and not args.thin:
+        return _fail("--viewer-url is for --thin: the single file carries its viewer inside it")
+
+    # A thin page loads the viewer rather than carrying it (design.md D68), and
+    # only a released version has one on the CDN.
+    viewer: str | None = None
+    if args.thin:
+        viewer = args.viewer_url or viewer_url(__version__)
+        if viewer is None:
+            return _fail(
+                f"--thin: {__version__} is not a released version, so it has no viewer on the CDN; "
+                "give one with --viewer-url"
+            )
 
     try:
         docs = collect(args.files, follow=not args.no_follow)
-        template = load_template(args.template)
+        template = None if args.thin else load_template(args.template)
     except (InputError, TemplateError) as e:
         return _fail(str(e))
 
@@ -138,7 +165,7 @@ def _view(args: argparse.Namespace) -> int:
         payload["ui"] = ui
 
     try:
-        html = embed(template, payload)
+        html = thin(payload, viewer) if viewer is not None else embed(template or "", payload)
     except TemplateError as e:
         return _fail(str(e))
 
@@ -172,7 +199,11 @@ def _view(args: argparse.Namespace) -> int:
             "warnings": [vars(f) for f in warned],
             "activities": len(plan.get("activities") or []) if docs.plan else None,
             "outcome": plan.get("outcome"),
-            "template_build": template_build(template),
+            **(
+                {"viewer": viewer}
+                if viewer is not None
+                else {"template_build": template_build(template or "")}
+            ),
         }
         # ASCII-escaped: valid JSON, and safe in any console code page.
         print(json.dumps(summary, indent=2))
