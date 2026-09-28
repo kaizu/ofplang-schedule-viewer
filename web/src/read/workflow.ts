@@ -94,14 +94,12 @@ function readProcess(raw: unknown, path: string): ProcessDef {
     const nodes = (Array.isArray(rawNodes) ? rawNodes : []).map((n, i) =>
       readNode(n, at(at(bodyPath, "nodes"), i)),
     );
+    const returns = readSources(body["returns"], at(bodyPath, "returns"));
     const composite: CompositeProcess = {
       kind: "composite",
       inputs,
       outputs,
-      body: {
-        nodes,
-        returns: readBindings(body["returns"], at(bodyPath, "returns")),
-      },
+      body: { nodes, returns: returns.from, returnLiterals: returns.value },
     };
     return composite;
   }
@@ -134,23 +132,51 @@ function readObjects(o: Record<string, unknown>, path: string): ObjectsSection {
 
 function readNode(raw: unknown, path: string): NodeInvocation {
   const n = reqRecord(raw, path);
+  const state = readSources(n["state"], at(path, "state"));
+  // A literal cannot introduce an Object identity (workflow spec 11.1.1).
+  const literal = Object.keys(state.value)[0];
+  if (literal !== undefined)
+    throw new ReadError(
+      at(at(path, "state"), literal),
+      "a literal (`value`) is Pure Data and cannot be bound to an Object-bearing port (workflow spec 11.1.1)",
+    );
+  // workflow spec §11: `state` binds Object-bearing inputs, `bind` Pure Data.
+  // (This read `data` until 2026-09-27 — a key the spec does not have, so
+  // every Pure Data arc was silently dropped; nothing bundled then had one.)
+  const bind = readSources(n["bind"], at(path, "bind"));
   return {
     id: reqString(n["id"], at(path, "id")),
     process: reqString(n["process"], at(path, "process")),
-    state: readBindings(n["state"], at(path, "state")),
-    // workflow spec §11: `state` binds Object-bearing inputs, `bind` Pure Data.
-    // (This read `data` until 2026-09-27 — a key the spec does not have, so
-    // every Pure Data arc was silently dropped; nothing bundled then had one.)
-    data: readBindings(n["bind"], at(path, "bind")),
+    state: state.from,
+    data: bind.from,
+    literals: bind.value,
   };
 }
 
-/** `port: { from: "<source>" }`, used by node bindings and composite returns. */
-function readBindings(raw: unknown, path: string): Record<string, Binding> {
-  const out: Record<string, Binding> = {};
+/**
+ * Binding source entries (workflow spec 2.6.6), used by node bindings and
+ * composite returns: each is exactly one of `from: "<source>"` or `value:` a
+ * literal. The two are kept apart — only a `from` has somewhere to be drawn
+ * from. (Until 0.1.3 a `value` was read as a missing `from`, and a workflow
+ * with any literal did not open.)
+ */
+function readSources(
+  raw: unknown,
+  path: string,
+): { from: Record<string, Binding>; value: Record<string, unknown> } {
+  const from: Record<string, Binding> = {};
+  const value: Record<string, unknown> = {};
   for (const [port, b] of Object.entries(optRecord(raw, path) ?? {})) {
-    if (!isRecord(b)) throw new ReadError(at(path, port), "expected a mapping with `from`");
-    out[port] = { from: reqString(b["from"], at(at(path, port), "from")) };
+    if (!isRecord(b)) throw new ReadError(at(path, port), "expected a mapping with `from` or `value`");
+    const hasFrom = "from" in b;
+    const hasValue = "value" in b;
+    if (hasFrom === hasValue)
+      throw new ReadError(
+        at(path, port),
+        `expected exactly one of \`from\` or \`value\` (workflow spec 2.6.6), got ${hasFrom ? "both" : "neither"}`,
+      );
+    if (hasFrom) from[port] = { from: reqString(b["from"], at(at(path, port), "from")) };
+    else value[port] = b["value"];
   }
-  return out;
+  return { from, value };
 }

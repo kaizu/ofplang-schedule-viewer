@@ -32,6 +32,10 @@ export interface GraphNode {
   readonly outputTypes: Readonly<Record<string, string>>;
   /** This node's own inbound bindings, by the port they land on. */
   readonly bindings: Readonly<Record<string, Binding>>;
+  /** Inputs given a literal value instead of a binding (workflow spec 11.1.1). */
+  readonly literals: Readonly<Record<string, unknown>>;
+  /** A composite's outputs returned as a literal (2.6.6). */
+  readonly returnLiterals: Readonly<Record<string, unknown>>;
   /** A composite's outputs, by the child port each is returned from. */
   readonly returns: Readonly<Record<string, string>>;
   /** Whether each returned output carries an Object, from its declared type. */
@@ -47,6 +51,7 @@ export function buildGraph(wf: Workflow): GraphNode {
     id: string,
     process: string,
     bindings: Record<string, Binding>,
+    literals: Readonly<Record<string, unknown>>,
   ): GraphNode => {
     const def = wf.processes[process];
     const inputs = Object.keys(def?.inputs ?? {});
@@ -59,7 +64,8 @@ export function buildGraph(wf: Workflow): GraphNode {
     if (!def || def.kind === "atomic") {
       return {
         id, path, key: pathKey(path), process,
-        kind: "atomic", inputs, outputs, inputTypes, outputTypes, bindings, returns: {}, returnsObject: {},
+        kind: "atomic", inputs, outputs, inputTypes, outputTypes, bindings, literals, returnLiterals: {},
+        returns: {}, returnsObject: {},
         children: [], atomicCount: 1,
       };
     }
@@ -68,7 +74,7 @@ export function buildGraph(wf: Workflow): GraphNode {
       const b: Record<string, Binding> = {};
       for (const [port, src] of Object.entries(inv.state)) b[port] = { from: src.from, object: true };
       for (const [port, src] of Object.entries(inv.data)) b[port] = { from: src.from, object: false };
-      return make(path.concat(inv.id), inv.id, inv.process, b);
+      return make(path.concat(inv.id), inv.id, inv.process, b, inv.literals);
     });
 
     const returns: Record<string, string> = {};
@@ -84,12 +90,13 @@ export function buildGraph(wf: Workflow): GraphNode {
 
     return {
       id, path, key: pathKey(path), process,
-      kind: "composite", inputs, outputs, inputTypes, outputTypes, bindings, returns, returnsObject, children,
+      kind: "composite", inputs, outputs, inputTypes, outputTypes, bindings, literals,
+      returnLiterals: def.body.returnLiterals, returns, returnsObject, children,
       atomicCount: children.reduce((n, c) => n + c.atomicCount, 0),
     };
   };
 
-  return make([], wf.entry, wf.entry, {});
+  return make([], wf.entry, wf.entry, {}, {});
 }
 
 /**

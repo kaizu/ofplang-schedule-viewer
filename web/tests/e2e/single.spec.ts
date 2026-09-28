@@ -200,3 +200,31 @@ test.describe("the Object view, asked for by the Python command (T2, plan step 5
     await page.screenshot({ path: info.outputPath("unavailable.png") });
   });
 });
+
+test("a workflow with a literal opens, and shows the value with its port", async ({ page }, info) => {
+  // Until 0.1.3 a `value` source entry (workflow spec 2.6.6) stopped the whole
+  // workflow from being read.
+  const workflow = [
+    'spec_version: "0.0"',
+    "types: { Plate: { domain: object } }",
+    "processes:",
+    "  heat:",
+    "    kind: atomic",
+    "    inputs: { plate: { type: Plate, phase: data }, minutes: { type: Float, phase: graph } }",
+    "    outputs: { plate: { type: Plate, phase: data } }",
+    "    objects: { map: { outputs.plate: inputs.plate } }",
+    "  main:",
+    "    kind: composite",
+    "    inputs: { plate: { type: Plate, phase: data } }",
+    "    outputs: { plate: { type: Plate, phase: data } }",
+    "    body:",
+    "      nodes:",
+    "        - { id: Heat, process: heat, state: { plate: { from: inputs.plate } }, bind: { minutes: { value: 2.5 } } }",
+    "      returns: { plate: { from: Heat.plate } }",
+    "entry: main",
+  ].join("\n");
+  await openWith(page, { name: "literal.workflow.yaml", workflow }, info.outputPath("literal.html"));
+  await expect(page.locator("#banner")).toBeHidden();
+  await page.locator('#graph [data-key="Heat"] rect.box').click();
+  await expect(page.locator("#inspector")).toContainText("minutes = 2.5");
+});

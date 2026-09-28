@@ -43,6 +43,12 @@ export interface NodeInvocation {
   readonly state: Readonly<Record<string, Binding>>;
   /** Pure Data bindings — the node's `bind` section (workflow spec §11). */
   readonly data: Readonly<Record<string, Binding>>;
+  /**
+   * Pure Data given as a literal rather than taken from somewhere — a `bind`
+   * entry with `value` instead of `from` (workflow spec 2.6.6, 11.1.1). It has
+   * no source, so no connection is drawn to it.
+   */
+  readonly literals: Readonly<Record<string, unknown>>;
 }
 
 export interface CompositeProcess {
@@ -52,6 +58,8 @@ export interface CompositeProcess {
   readonly body: {
     readonly nodes: readonly NodeInvocation[];
     readonly returns: Readonly<Record<string, Binding>>;
+    /** Outputs returned as a literal (2.6.6): a constant, with nothing inside feeding it. */
+    readonly returnLiterals: Readonly<Record<string, unknown>>;
   };
 }
 

@@ -303,6 +303,9 @@ export function waitTooltip(scene: Scene, object: string, start: number, end: nu
   return `<div class="tt">${esc(`waiting on ${spot}`)}</div><div class="tl">${lines.map(esc).join("<br>")}</div>`;
 }
 
+/** A literal as written: a string quoted, a number or a list as it reads. */
+const literal = (v: unknown): string => JSON.stringify(v) ?? String(v);
+
 /** The hover card. */
 export function tooltipFor(scene: Scene, index: number): string {
   const a = scene.activities[index];
@@ -385,8 +388,11 @@ export function renderNodeDetail(graph: GraphNode, key: string, scene?: Scene): 
       block(
         "Ports",
         dl([
-          ...node.inputs.map((p) => ["in", p] as const),
-          ...node.outputs.map((p) => ["out", p] as const),
+          // A literal is shown with its port: it has no source to draw a connection from.
+          ...node.inputs.map((p) => ["in", p in node.literals ? `${p} = ${literal(node.literals[p])}` : p] as const),
+          ...node.outputs.map(
+            (p) => ["out", p in node.returnLiterals ? `${p} = ${literal(node.returnLiterals[p])}` : p] as const,
+          ),
         ]),
       ),
     );
