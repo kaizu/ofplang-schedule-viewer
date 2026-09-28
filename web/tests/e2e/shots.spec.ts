@@ -57,7 +57,7 @@ test("the three views of the big one", async ({ page }) => {
 });
 
 test("the Object view (design.md §23)", async ({ page }) => {
-  for (const doc of ["storage", "reformatter", "reroute_chain_replan", "data_flow", "plate_batch"]) {
+  for (const doc of ["plate_assay", "storage", "reformatter", "reroute_chain_replan", "data_flow", "plate_batch"]) {
     await page.goto(`/?doc=${doc}`);
     await settle(page);
     const button = page.locator('#views button[data-view="object"]');
